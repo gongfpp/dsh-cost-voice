@@ -1,0 +1,7 @@
+node_modules/
+samples/
+browser-screenshots/
+*.log
+.DS_Store
+Thumbs.db
+.npmrc
