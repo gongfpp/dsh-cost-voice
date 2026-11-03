@@ -1,0 +1,6 @@
+url: https://github.com/gongfpp/dsh-cost-voice
+name: gongfpp/dsh-cost-voice
+category: usage
+description:
+  en: Per-turn spend voice announcements for the DSH Web GUI — Alipay or Dabaifan clips, amount from dsh-cost-meter or per-model estimates.
+  zh: 每轮会话结束用支付宝或大白饭的声音播报本轮花费；金额优先取 dsh-cost-meter，否则按该轮模型单价估算。
