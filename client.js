@@ -61,6 +61,94 @@ window.__ModuleLoader__.load({
       return clips
     }
 
+    /**
+     * 按一轮用量与单价估算费用（元）。
+     * harness 的 usage.outputTokens 已经包含推理 token（dsh-llm-pi-ai 的 mapUsage 约定），
+     * 所以这里不能再单独加一次 reasoningTokens，否则推理多的轮次会被算贵一倍。
+     */
+    function estimateFromUsage(usage = {}, price = {}) {
+      const per = (tokens, rate) => (Number(tokens) || 0) * (Number(rate) || 0) / 1_000_000
+      return per(usage.inputTokens, price.input)
+        + per(usage.outputTokens, price.output)
+        + per(usage.cacheReadTokens, price.cachedInput)
+        + per(usage.cacheWriteTokens, price.cacheWrite)
+    }
+
+    /** 某轮用到的模型单价（元/百万 token）：用户覆盖 > 费用插件价格表 > 兜底单价。 */
+    function pickPrice({ config, pricing, record }) {
+      const key = `${record?.provider ?? ''}/${record?.model ?? ''}`
+      const override = config?.modelPrices?.[key] ?? {}
+      const catalog = pricing?.providers?.[record?.provider]?.[record?.model] ?? {}
+      const pick = (field) => {
+        const value = override[field] ?? catalog[field]
+        return Number.isFinite(value) ? value : undefined
+      }
+      const fallbackInput = Math.max(0, Number(config?.inputPrice) || 0)
+      const fallbackOutput = Math.max(0, Number(config?.outputPrice) || 0)
+      return {
+        input: pick('input') ?? fallbackInput,
+        output: pick('output') ?? fallbackOutput,
+        cachedInput: pick('cachedInput') ?? fallbackInput * 0.1,
+        cacheWrite: pick('cacheWrite') ?? fallbackInput * 1.25,
+      }
+    }
+
+    /**
+     * 这一轮播多少钱：cost-meter 明确算过（found:true）就用它的金额，否则按单价估算。
+     * cost-meter 对未定价轮次返回 found:false、cost:0——那是「不知道」，不是「花了 0 元」。
+     */
+    function resolveAmountOf({ config, pricing, record }) {
+      const usable = config?.basis !== 'tokens'
+      const known = record?.costFound === true && typeof record.costCny === 'number' && Number.isFinite(record.costCny)
+      if (usable && known) return { amount: record.costCny, source: 'cost-meter' }
+      // 兼容只带 costCny 的旧版宿主：有正数金额就采信。
+      if (usable && typeof record?.costCny === 'number' && record.costCny > 0) return { amount: record.costCny, source: 'cost-meter' }
+      return { amount: estimateFromUsage(record?.usage, pickPrice({ config, pricing, record })), source: 'estimate' }
+    }
+
+    let ACTIVE_LOCALE = 'zh'
+    const I18N = {
+      zh: {
+        on: '开启', off: '关闭', yes: '是', no: '否',
+        sectionAnnounce: '播报', enabled: '启用', voice: '音色', alipay: '支付宝', dabaifan: '大白饭',
+        basis: '金额来源', basisMeter: '费用插件', basisTokens: '按单价估算',
+        preview: '试听', clearLog: '清空记录',
+        meterReading: '费用插件状态读取中…',
+        meterConnected: '已连接 dsh-cost-meter，金额取它的每轮费用。',
+        meterMissing: '未检测到 dsh-cost-meter，金额按模型价格估算。',
+        sectionPlay: '播放', minAmount: '低于此金额不播（元）', gapMs: '片段间隔（毫秒）', volume: '音量',
+        sectionPrice: '模型价格（元/百万 token）',
+        pricingReading: '价格表读取中…',
+        modelRowHint: '每行两列：输入 / 输出。留空则用价格表里的值。',
+        fallbackInput: '其他模型：输入价', fallbackOutput: '其他模型：输出价',
+        estimateOnly: '仅在「按单价估算」时生效。',
+        sectionTiming: '时机', completedOnly: '只在正常完成的轮次播报', quiet: '静音时段', quietFromTo: '从 / 到',
+        sectionLog: '最近播报', emptyLog: '还没有播报记录。',
+        statusError: '状态读取失败：', estimateSuffix: '（估算）', turnLabel: '轮',
+        audioBlocked: '浏览器暂未允许播放声音，点一次「试听」后再继续。',
+      },
+      en: {
+        on: 'On', off: 'Off', yes: 'Yes', no: 'No',
+        sectionAnnounce: 'Announcement', enabled: 'Enabled', voice: 'Voice', alipay: 'Alipay', dabaifan: 'Big fish',
+        basis: 'Amount source', basisMeter: 'Cost plugin', basisTokens: 'Estimate',
+        preview: 'Preview', clearLog: 'Clear log',
+        meterReading: 'Checking the cost plugin…',
+        meterConnected: 'Connected to dsh-cost-meter; amounts come from its per-turn cost.',
+        meterMissing: 'dsh-cost-meter not found; amounts are estimated from model prices.',
+        sectionPlay: 'Playback', minAmount: 'Skip below this amount (CNY)', gapMs: 'Clip gap (ms)', volume: 'Volume',
+        sectionPrice: 'Model prices (CNY / 1M tokens)',
+        pricingReading: 'Loading price table…',
+        modelRowHint: 'Two columns per model: input / output. Leave empty to use the price table.',
+        fallbackInput: 'Other models: input', fallbackOutput: 'Other models: output',
+        estimateOnly: 'Only used when the amount is estimated.',
+        sectionTiming: 'Timing', completedOnly: 'Only announce completed turns', quiet: 'Quiet hours', quietFromTo: 'From / to',
+        sectionLog: 'Recent announcements', emptyLog: 'Nothing announced yet.',
+        statusError: 'Status request failed: ', estimateSuffix: ' (estimate)', turnLabel: 'turn',
+        audioBlocked: 'The browser blocked audio. Press "Preview" once to unlock it.',
+      },
+    }
+    const t = (key) => (I18N[ACTIVE_LOCALE] ?? I18N.zh)[key] ?? I18N.zh[key] ?? key
+
     const readJSON = (key, fallback) => {
       try {
         const raw = localStorage.getItem(key)
@@ -96,8 +184,10 @@ window.__ModuleLoader__.load({
       let cursor = 0
       let busy = false
       let audioContext = null
+      const BUFFER_LIMIT = 512
       const buffers = new Map()
       const queue = []
+      let pumping = false
 
       const pruneSeen = () => {
         const cutoff = Date.now() - 2 * 24 * 60 * 60_000
@@ -115,19 +205,32 @@ window.__ModuleLoader__.load({
         return audioContext
       }
 
+      const CLIP_VERSION = 3
+
       const loadBuffer = async (name) => {
-        if (buffers.has(name)) return buffers.get(name)
+        const cached = buffers.get(name)
+        if (cached) return cached
         const context = ensureAudio()
         if (!context) throw new Error('浏览器不支持音频播放')
-        const response = await fetch(`api/cost-voice/clip?name=${encodeURIComponent(name)}&v=2`, { cache: 'force-cache' })
+        const response = await fetch(`api/cost-voice/clip?name=${encodeURIComponent(name)}&v=${CLIP_VERSION}`, { cache: 'force-cache' })
         if (!response.ok) throw new Error(`音频片段读取失败 (${response.status})`)
         const bytes = await response.arrayBuffer()
         const buffer = await context.decodeAudioData(bytes)
+        if (buffers.size >= BUFFER_LIMIT) buffers.delete(buffers.keys().next().value)
         buffers.set(name, buffer)
         return buffer
       }
 
-      const playClips = async (dir, clips) => {
+      /** 先把一整句的所有片段并行取回并解码，再按顺序排时间轴——避免首句边取边播的等待与卡顿。 */
+      const prefetch = async (dir, clips) => {
+        const names = clips.map((clip) => `${dir}/${clip}.mp3`)
+        const settled = await Promise.allSettled(names.map(loadBuffer))
+        const failed = settled.find((item) => item.status === 'rejected')
+        if (failed) throw failed.reason
+        return settled.map((item) => item.value)
+      }
+
+      const playBuffers = async (buffersList) => {
         const context = ensureAudio()
         if (!context) { setStatus({ audio: 'unsupported' }); return }
         if (context.state === 'suspended') { try { await context.resume() } catch { /* 等用户手势 */ } }
@@ -137,8 +240,7 @@ window.__ModuleLoader__.load({
         master.connect(context.destination)
         let at = context.currentTime + 0.03
         const gap = Math.max(0, Number(view.config.gapMs) || 0) / 1000
-        for (const clip of clips) {
-          const buffer = await loadBuffer(`${dir}/${clip}.mp3`)
+        for (const buffer of buffersList) {
           const source = context.createBufferSource()
           source.buffer = buffer
           source.connect(master)
@@ -147,7 +249,11 @@ window.__ModuleLoader__.load({
         }
         const totalMs = Math.max(0, (at - context.currentTime) * 1000)
         await new Promise((resolve) => setTimeout(resolve, totalMs))
-        setStatus({ playing: false })
+      }
+
+      const playClips = async (dir, clips) => {
+        const buffersList = await prefetch(dir, clips)
+        await playBuffers(buffersList)
       }
 
       // 大白饭：1–100 分钱的常用金额用整句预渲染，避免数字拼接的断句感；其余回落片段拼接。
@@ -157,6 +263,28 @@ window.__ModuleLoader__.load({
           try { await playClips('dabaifan-amounts', [String(cents)]); return } catch { /* 还没预渲染到这一句就用拼接兜底 */ }
         }
         await playClips(PACKS[pack].dir, [PACKS[pack].prefix, ...amountClips(amount)])
+      }
+
+      /** 播报排队：正在播的时候来了新一轮就排在后面，而不是直接丢掉。 */
+      const pump = async () => {
+        if (pumping) return
+        pumping = true
+        try {
+          while (queue.length > 0) {
+            const job = queue.shift()
+            try { await playAnnouncement(job.pack, job.amount) } catch { /* 播放失败不打断会话 */ }
+          }
+        } finally {
+          pumping = false
+          setStatus({ playing: false })
+        }
+      }
+
+      const enqueue = (pack, amount) => {
+        queue.push({ pack, amount })
+        if (queue.length > 4) queue.splice(0, queue.length - 4)
+        setStatus({ playing: true })
+        void pump()
       }
 
       const loadPricing = async () => {
@@ -169,41 +297,11 @@ window.__ModuleLoader__.load({
       }
 
       /** 某一轮使用模型的价格（元/百万 token）：用户覆盖 > 费用插件价格表 > 兜底单价。 */
-      const priceOf = (record) => {
-        const key = `${record?.provider ?? ''}/${record?.model ?? ''}`
-        const override = view.config.modelPrices?.[key] ?? {}
-        const catalog = view.pricing?.providers?.[record?.provider]?.[record?.model] ?? {}
-        const pick = (field) => {
-          const value = override[field] ?? catalog[field]
-          return Number.isFinite(value) ? value : undefined
-        }
-        const fallbackInput = Math.max(0, Number(view.config.inputPrice) || 0)
-        const fallbackOutput = Math.max(0, Number(view.config.outputPrice) || 0)
-        return {
-          input: pick('input') ?? fallbackInput,
-          output: pick('output') ?? fallbackOutput,
-          cachedInput: pick('cachedInput') ?? fallbackInput * 0.1,
-          cacheWrite: pick('cacheWrite') ?? fallbackInput * 1.25,
-        }
-      }
+      const priceOf = (record) => pickPrice({ config: view.config, pricing: view.pricing, record })
 
-      const estimateAmount = (record) => {
-        const price = priceOf(record)
-        const usage = record.usage ?? {}
-        const per = (tokens, rate) => (Number(tokens) || 0) * (Number(rate) || 0) / 1_000_000
-        return per(usage.inputTokens, price.input)
-          + per(usage.outputTokens, price.output)
-          + per(usage.cacheReadTokens, price.cachedInput)
-          + per(usage.cacheWriteTokens, price.cacheWrite)
-          + per(usage.reasoningTokens, price.output)
-      }
+      const estimateAmount = (record) => estimateFromUsage(record?.usage, priceOf(record))
 
-      const resolveAmount = (record) => {
-        if (view.config.basis !== 'tokens' && typeof record.costCny === 'number' && Number.isFinite(record.costCny)) {
-          return { amount: record.costCny, source: 'cost-meter' }
-        }
-        return { amount: estimateAmount(record), source: 'estimate' }
-      }
+      const resolveAmount = (record) => resolveAmountOf({ config: view.config, pricing: view.pricing, record })
 
       const inQuietHours = () => {
         const c = view.config
@@ -215,7 +313,7 @@ window.__ModuleLoader__.load({
         return start < end ? minutes >= start && minutes < end : minutes >= start || minutes < end
       }
 
-      const announce = async (record) => {
+      const announce = (record) => {
         const key = `${record.sessionId}:${record.turn}`
         if (seen[key]) return
         seen[key] = Date.now()
@@ -229,11 +327,10 @@ window.__ModuleLoader__.load({
         if (rounded < view.config.minAmount) return
         const pack = view.config.voice === 'dabaifan' ? 'dabaifan' : 'alipay'
         const text = `${PACKS[pack].label} ${rounded.toFixed(2)} 元`
-        if (view.status.playing) return
         log = [{ time: Date.now(), turn: record.turn, amount: rounded, pack, source, text, provider: record.provider ?? '', model: record.model ?? '' }, ...log].slice(0, 20)
         writeJSON(LOG_KEY, log)
         emit({ log })
-        try { await playAnnouncement(pack, rounded) } catch { /* 播放失败不打断会话 */ }
+        enqueue(pack, rounded)
       }
 
       const poll = async () => {
@@ -257,7 +354,7 @@ window.__ModuleLoader__.load({
             if (data.seq < cursor) cursor = 0
             const baseline = cursor === 0
             cursor = data.seq
-            if (!baseline) for (const record of data.events ?? []) await announce(record)
+            if (!baseline) for (const record of data.events ?? []) announce(record)
           }
         } catch (error) {
           setStatus({ error: String(error?.message ?? error) })
@@ -287,7 +384,7 @@ window.__ModuleLoader__.load({
         },
         preview(amount = 0.12) {
           const pack = view.config.voice === 'dabaifan' ? 'dabaifan' : 'alipay'
-          void playAnnouncement(pack, amount).catch(() => {})
+          enqueue(pack, amount)
         },
         clearLog() {
           log = []
@@ -394,52 +491,56 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'cv-page' },
         h('style', null, css),
         h('section', { className: 'cv-group' },
-          h('h3', null, '播报'),
-          h('div', { className: 'cv-row' }, h('span', null, '启用'), toggle('enabled', c.enabled ? '开启' : '关闭')),
-          h('div', { className: 'cv-row' }, h('span', null, '音色'), segment('voice', [['alipay', '支付宝'], ['dabaifan', '大白饭']])),
-          h('div', { className: 'cv-row' }, h('span', null, '金额来源'), segment('basis', [['auto', '费用插件'], ['tokens', '按单价估算']])),
+          h('h3', null, t('sectionAnnounce')),
+          h('div', { className: 'cv-row' }, h('span', null, t('enabled')), toggle('enabled', c.enabled ? t('on') : t('off'))),
+          h('div', { className: 'cv-row' }, h('span', null, t('voice')), segment('voice', [['alipay', t('alipay')], ['dabaifan', t('dabaifan')]])),
+          h('div', { className: 'cv-row' }, h('span', null, t('basis')), segment('basis', [['auto', t('basisMeter')], ['tokens', t('basisTokens')]])),
           h('div', { className: 'cv-actions' },
-            h('button', { type: 'button', className: 'primary', onClick: () => controller.preview() }, '试听'),
-            h('button', { type: 'button', onClick: () => controller.clearLog() }, '清空记录')),
+            h('button', { type: 'button', className: 'primary', onClick: () => controller.preview() }, t('preview')),
+            h('button', { type: 'button', onClick: () => controller.clearLog() }, t('clearLog'))),
           h('p', { className: 'cv-note' },
-            costMeter === null ? '费用插件状态读取中…' : costMeter ? '已连接 dsh-cost-meter，金额取它的每轮费用。' : '未检测到 dsh-cost-meter，金额按模型价格估算。')),
+            costMeter === null ? t('meterReading') : costMeter ? t('meterConnected') : t('meterMissing'))),
         h('section', { className: 'cv-group' },
-          h('h3', null, '播放'),
-          number('minAmount', '低于此金额不播（元）', ''),
-          number('gapMs', '片段间隔（毫秒）', ''),
-          h('div', { className: 'cv-row' }, h('span', null, '音量'),
+          h('h3', null, t('sectionPlay')),
+          number('minAmount', t('minAmount'), ''),
+          number('gapMs', t('gapMs'), ''),
+          h('div', { className: 'cv-row' }, h('span', null, t('volume')),
             h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: c.volume, onChange: (event) => update({ volume: Number(event.target.value) }) }))),
         h('section', { className: 'cv-group' },
-          h('h3', null, '模型价格（元/百万 token）'),
+          h('h3', null, t('sectionPrice')),
           h('p', { className: 'cv-note' }, pricingNote),
           v.models.length > 0 ? h(React.Fragment, null,
             v.models.map(modelPriceRow),
-            h('p', { className: 'cv-note' }, '每行两列：输入 / 输出。留空则用价格表里的值。')) : null,
-          number('inputPrice', '其他模型：输入价', ''),
-          number('outputPrice', '其他模型：输出价', ''),
-          h('p', { className: 'cv-note' }, '仅在「按单价估算」时生效。')),
+            h('p', { className: 'cv-note' }, t('modelRowHint'))) : null,
+          number('inputPrice', t('fallbackInput'), ''),
+          number('outputPrice', t('fallbackOutput'), ''),
+          h('p', { className: 'cv-note' }, t('estimateOnly'))),
         h('section', { className: 'cv-group' },
-          h('h3', null, '时机'),
-          h('div', { className: 'cv-row' }, h('span', null, '只在正常完成的轮次播报'), toggle('completedOnly', c.completedOnly ? '是' : '否')),
-          h('div', { className: 'cv-row' }, h('span', null, '静音时段'), toggle('quiet', c.quiet ? '开启' : '关闭')),
-          c.quiet ? h('div', { className: 'cv-row' }, h('span', null, '从 / 到'),
+          h('h3', null, t('sectionTiming')),
+          h('div', { className: 'cv-row' }, h('span', null, t('completedOnly')), toggle('completedOnly', c.completedOnly ? t('yes') : t('no'))),
+          h('div', { className: 'cv-row' }, h('span', null, t('quiet')), toggle('quiet', c.quiet ? t('on') : t('off'))),
+          c.quiet ? h('div', { className: 'cv-row' }, h('span', null, t('quietFromTo')),
             h('span', { style: { display: 'inline-flex', gap: 6, alignItems: 'center' } },
               h('input', { className: 'cv-num', type: 'time', value: c.quietStart, onChange: (event) => update({ quietStart: event.target.value }) }),
               h('input', { className: 'cv-num', type: 'time', value: c.quietEnd, onChange: (event) => update({ quietEnd: event.target.value }) }))) : null),
         h('section', { className: 'cv-group' },
-          h('h3', null, '最近播报'),
-          v.log.length === 0 ? h('p', { className: 'cv-note' }, '还没有播报记录。') : h('ul', { className: 'cv-log' },
+          h('h3', null, t('sectionLog')),
+          v.log.length === 0 ? h('p', { className: 'cv-note' }, t('emptyLog')) : h('ul', { className: 'cv-log' },
             v.log.map((entry) => h('li', { key: `${entry.time}-${entry.turn}` },
-              h('span', null, `${new Date(entry.time).toLocaleTimeString()} · 第 ${entry.turn} 轮`),
-              h('b', null, `${entry.text}${entry.source === 'estimate' ? '（估算）' : ''}`)))),
-          v.status.error ? h('p', { className: 'cv-error' }, `状态读取失败：${v.status.error}`) : null,
-          v.status.audio === 'suspended' ? h('p', { className: 'cv-note cv-warn' }, '浏览器暂未允许播放声音，点一次「试听」后再继续。') : null,
+              h('span', null, `${new Date(entry.time).toLocaleTimeString()} · ${t('turnLabel')} ${entry.turn}`),
+              h('b', null, `${entry.text}${entry.source === 'estimate' ? t('estimateSuffix') : ''}`)))),
+          v.status.error ? h('p', { className: 'cv-error' }, `${t('statusError')}${v.status.error}`) : null,
+          v.status.audio === 'suspended' ? h('p', { className: 'cv-note cv-warn' }, t('audioBlocked')) : null,
         ))
     }
 
     return {
       inject: ['slots'],
       apply(ctx) {
+        try {
+          const active = String(ctx.get('locale')?.getSnapshot?.()?.active ?? '')
+          ACTIVE_LOCALE = active.toLowerCase().startsWith('en') ? 'en' : 'zh'
+        } catch { ACTIVE_LOCALE = 'zh' }
         const controller = createController()
         ctx.effect(() => () => controller.dispose(), 'cost-voice: player')
         ctx.slots.inject('shell.overlay', () => ctx.slots.register(
@@ -451,6 +552,8 @@ window.__ModuleLoader__.load({
           (props) => (props.view === 'page' ? h(Settings, { ...props, controller }) : null),
         ))
       },
+      /** 供 scripts/test-core.mjs 直接验证的纯函数（不进运行时逻辑）。 */
+      __test: { integerClips, amountClips, estimateFromUsage, pickPrice, resolveAmountOf, PACKS },
     }
   },
 })

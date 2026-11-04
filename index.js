@@ -14,7 +14,7 @@ const KEEP_MS = 10 * 60_000
 const USD_TO_CNY = 7.2
 
 /** 把价格目录（USD/百万 token）折成元，并压成 provider -> model -> 单价。 */
-function normalizeCatalog(providers, currency = 'USD') {
+export function normalizeCatalog(providers, currency = 'USD') {
   const factor = currency === 'CNY' ? 1 : USD_TO_CNY
   const table = {}
   for (const [provider, families] of Object.entries(providers ?? {})) {
@@ -89,49 +89,76 @@ function loadPriceCatalog(root, ctx) {
 }
 
 /** 一轮内的用量累加器。 */
-function emptyUsage() {
+export function emptyUsage() {
   return { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0 }
 }
 
-function addUsage(target, usage) {
+export function addUsage(target, usage) {
   for (const field of ['inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'reasoningTokens']) {
     const value = Number(usage?.[field])
     if (Number.isFinite(value) && value > 0) target[field] += value
   }
 }
 
-/** costMeter.getTurnCost 的返回值可能是数字，也可能是 {cost} 之类的对象。 */
-function normalizeAmount(value) {
-  if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, value)
-  const candidate = value?.costCny ?? value?.cost ?? value?.value ?? value?.amount
-  return typeof candidate === 'number' && Number.isFinite(candidate) ? Math.max(0, candidate) : null
+/**
+ * 把 costMeter.getTurnCost 的返回值折成 { amount, found }。
+ * cost-meter 对「没有计费记录 / 未定价」的轮次返回 found:false、cost:0——这种 0 不是真花了 0 元，
+ * 必须让页面回落到按单价估算，否则会播成 0.01 元。
+ */
+export function normalizeCost(value) {
+  const candidate = typeof value === 'number'
+    ? value
+    : value?.costCny ?? value?.cost ?? value?.value ?? value?.amount
+  const amount = typeof candidate === 'number' && Number.isFinite(candidate) ? Math.max(0, candidate) : null
+  const found = amount !== null && value?.found !== false
+  return { amount: found ? amount : null, found }
 }
 
 export function apply(ctx, config = {}) {
   const root = dirname(fileURLToPath(import.meta.url))
-  const pricing = loadPriceCatalog(root, ctx)
+  let pricing = loadPriceCatalog(root, ctx)
+  let pricingAt = Date.now()
   const events = []
   const clipCache = new Map()
   const turns = new Map()
+  const pendingCost = new Map()
   let seq = 0
+
+  /** 价格表长时间运行时定期重读，cost-meter 升级后不必重启 dsh web。 */
+  const refreshPricing = (maxAgeMs = 30 * 60_000) => {
+    if (Date.now() - pricingAt < maxAgeMs) return
+    pricing = loadPriceCatalog(root, ctx)
+    pricingAt = Date.now()
+  }
 
   const remember = (record) => {
     events.push(record)
     if (events.length > 200) events.splice(0, events.length - 200)
   }
 
-  /** 有 cost-meter 时用它的每轮费用，否则留空由页面按单价估算。 */
+  /**
+   * 有 cost-meter 时用它的每轮费用，否则留空由页面按单价估算。
+   * 返回的 Promise 挂在 pendingCost 上：轮询接口会等它落地，避免页面先看到 costCny=null 就急着用估算播报。
+   */
   const resolveCost = (sessionId, startSeq, endSeq, record) => {
     const meter = ctx.get('costMeter')
-    if (!meter || typeof meter.getTurnCost !== 'function') return
-    Promise.resolve()
+    if (!meter || typeof meter.getTurnCost !== 'function') {
+      record.costFound = false
+      return Promise.resolve()
+    }
+    const task = Promise.resolve()
       .then(() => meter.getTurnCost(sessionId, startSeq, endSeq, 'CNY'))
       .then((value) => {
-        const amount = normalizeAmount(value)
-        if (amount !== null) record.costCny = amount
+        const { amount, found } = normalizeCost(value)
+        record.costCny = amount
+        record.costFound = found
       })
-      .catch(() => { /* 计费插件不可用时保持 null，页面用单价估算 */ })
+      .catch(() => { /* 计费插件不可用时保持 null，页面用单价估算 */ record.costFound = false })
+      .finally(() => { pendingCost.delete(record.seq) })
+    pendingCost.set(record.seq, task)
+    return task
   }
+
 
   ctx.on('session/event', (session, event) => {
     const sessionId = session?.id
@@ -177,10 +204,11 @@ export function apply(ctx, config = {}) {
       provider: state.provider,
       model: state.model,
       costCny: null,
+      costFound: null,
       time: Date.now(),
     }
     remember(record)
-    resolveCost(sessionId, state.startSeq, event.seq, record)
+    void resolveCost(sessionId, state.startSeq, event.seq, record)
   }, { global: true })
 
   // 页面轮询：增量返回本次会话的轮次事实。
@@ -189,6 +217,7 @@ export function apply(ctx, config = {}) {
     methods: ['GET'],
     requestBody: 'buffered',
     fetch: async (request) => {
+      refreshPricing()
       const url = new URL(request.url)
       const sessionId = url.searchParams.get('sessionId') ?? ''
       const since = Number(url.searchParams.get('since') ?? 0)
@@ -196,6 +225,16 @@ export function apply(ctx, config = {}) {
       const fresh = events.filter((record) => record.sessionId === sessionId
         && record.seq > (Number.isSafeInteger(since) ? since : 0)
         && now - record.time < KEEP_MS)
+      // 刚结束的轮次可能还在等 cost-meter 算钱：等它们落地再返回（最多 1.5 秒），
+      // 这样页面拿到的是最终金额，而不是「先播估算、之后不纠正」。
+      const waiting = fresh.map((record) => pendingCost.get(record.seq)).filter(Boolean)
+      if (waiting.length > 0) {
+        await Promise.race([
+          Promise.allSettled(waiting),
+          new Promise((resolve) => setTimeout(resolve, 1500)),
+        ])
+      }
+
       const models = []
       for (const record of events) {
         if (record.sessionId !== sessionId || !record.provider || !record.model) continue
@@ -232,7 +271,10 @@ export function apply(ctx, config = {}) {
     path: '/api/cost-voice/pricing',
     methods: ['GET'],
     requestBody: 'buffered',
-    fetch: async () => Response.json(pricing, { headers: { 'cache-control': 'no-store' } }),
+    fetch: async () => {
+      refreshPricing(5 * 60_000)
+      return Response.json(pricing, { headers: { 'cache-control': 'no-store' } })
+    },
   }), 'cost-voice: pricing')
 
   // 音频片段：按需读包内文件，命中后缓存在内存。
