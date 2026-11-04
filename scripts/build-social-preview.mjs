@@ -1,4 +1,4 @@
-// 由 icon.svg 生成 docs/social-preview.svg（1280×640），避免图标与分享图两处手工同步漂移。
+// 由 icon.png 生成 docs/social-preview.svg（1280×640），避免图标与分享图两处手工同步漂移。
 // 用法：node scripts/build-social-preview.mjs
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -6,14 +6,11 @@ import { dirname, resolve } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "..");
-const iconSvg = readFileSync(resolve(root, "icon.svg"), "utf8");
+const iconBase64 = readFileSync(resolve(root, "icon.png")).toString("base64");
+const iconHref = `data:image/png;base64,${iconBase64}`;
 
-const inner = iconSvg
-  .replace(/^[\s\S]*?<svg[^>]*>/, "")
-  .replace(/<\/svg>\s*$/, "")
-  .trim();
-
-if (!inner) throw new Error("icon.svg 解析失败：没有取到内部图形");
+// 图标在分享图上的位置与尺寸（1280×640 画布）
+const ICON = { x: 96, y: 176, size: 288, radius: 60 };
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" font-family="'Microsoft YaHei','PingFang SC','Noto Sans SC',system-ui,sans-serif" role="img" aria-label="每轮扣款语音播报 · dsh-cost-voice">
   <title>每轮扣款语音播报 · dsh-cost-voice</title>
@@ -27,15 +24,17 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" widt
       <stop offset="0" stop-color="#4D6BFE" stop-opacity="0.34"/>
       <stop offset="1" stop-color="#4D6BFE" stop-opacity="0"/>
     </radialGradient>
+    <clipPath id="iconClip">
+      <rect x="${ICON.x}" y="${ICON.y}" width="${ICON.size}" height="${ICON.size}" rx="${ICON.radius}"/>
+    </clipPath>
   </defs>
 
   <rect width="1280" height="640" fill="url(#bg)"/>
   <circle cx="240" cy="320" r="330" fill="url(#glow)"/>
 
-  <!-- 图标：大肥鱼吃白米饭（来自 icon.svg，4 倍放大） -->
-  <g transform="translate(112 176) scale(4)">
-${inner}
-  </g>
+  <!-- 图标：吃白饭的蓝色大肥鱼（来自 icon.png） -->
+  <rect x="${ICON.x - 6}" y="${ICON.y - 6}" width="${ICON.size + 12}" height="${ICON.size + 12}" rx="${ICON.radius + 6}" fill="#FFFFFF" opacity="0.06"/>
+  <image href="${iconHref}" x="${ICON.x}" y="${ICON.y}" width="${ICON.size}" height="${ICON.size}" clip-path="url(#iconClip)" preserveAspectRatio="xMidYMid slice"/>
 
   <!-- 文字 -->
   <text x="470" y="250" font-size="64" font-weight="700" fill="#F8FAFC">每轮扣款语音播报</text>
@@ -64,4 +63,4 @@ ${inner}
 `;
 
 writeFileSync(resolve(root, "docs/social-preview.svg"), svg);
-console.log(`docs/social-preview.svg 已生成（内联 icon.svg ${inner.length} 字节）`);
+console.log(`docs/social-preview.svg 已生成（内联 icon.png base64 ${iconBase64.length} 字符）`);

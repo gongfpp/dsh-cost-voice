@@ -25,7 +25,7 @@
     "./client": "./client.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./locale/*.json": "./locale/*.json",
-    "./icon": "./icon.svg",
+    "./icon": "./icon.png",
     "./package.json": "./package.json"
   },
   "files": [
@@ -33,7 +33,7 @@
     "client.js",
     "cordis.patch.yml",
     "locale/*.json",
-    "icon.svg",
+    "icon.png",
     "assets/voices/**/*.mp3",
     "assets/pricing.json",
     "docs/preview-settings.png",
