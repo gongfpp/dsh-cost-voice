@@ -5,7 +5,7 @@
 - 仓库结构整理（不影响运行时行为）：开发脚本 `tools/` → `scripts/`；音色渲染素材与原始截图移入 `dev/`，不再进仓库；`docs/` 去重，只保留 README 用的一张预览图与目录条目模板。
 - `package.json` 的 `files` 白名单改为显式文件名（`docs/preview-settings.png`），避免 `docs/` 里新增的图被自动打进包；`.gitignore` 补 `*.tgz`。
 - README 重写为面向使用者的结构（是什么 → 功能 → 安装 → 设置 → 听不到声音 → 金额口径 → 限制 → 开发），补图标与 GitHub 社交预览图。
-- 图标换成手绘的「大肥鱼吃白米饭」（`icon.svg`），GitHub 社交预览图同步改版。
+- 图标换成手绘的「大肥鱼吃白米饭」（`icon.svg`）：蓝色胖鲸 + 一大碗白饭，取自社区「DeepSeek 鲸鱼娘 / 大肥鱼吃白饭」的梗；GitHub 社交预览图同步改版，并新增 `scripts/build-social-preview.mjs` 从 `icon.svg` 生成，避免两处图片手工同步漂移。
 
 ## 1.0.1 — 2026-11-04
 
