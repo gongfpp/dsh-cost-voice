@@ -134,6 +134,8 @@ window.__ModuleLoader__.load({
         sectionTiming: '时机', completedOnly: '只在正常完成的轮次播报', quiet: '静音时段', quietFromTo: '从 / 到',
         sectionLog: '最近播报', emptyLog: '还没有播报记录。',
         statusError: '状态读取失败：', estimateSuffix: '（估算）', turnLabel: '轮',
+        currencyUnit: '元', pricingTable: '价格表', pricingBuiltin: '插件内置', pricingModels: '个模型',
+        placeholderInput: '输入', placeholderOutput: '输出',
         audioBlocked: '浏览器暂未允许播放声音，点一次「试听」后再继续。',
       },
       en: {
@@ -153,6 +155,8 @@ window.__ModuleLoader__.load({
         sectionTiming: 'Timing', completedOnly: 'Only announce completed turns', quiet: 'Quiet hours', quietFromTo: 'From / to',
         sectionLog: 'Recent announcements', emptyLog: 'Nothing announced yet.',
         statusError: 'Status request failed: ', estimateSuffix: ' (estimate)', turnLabel: 'turn',
+        currencyUnit: 'CNY', pricingTable: 'Price table', pricingBuiltin: 'bundled', pricingModels: 'models',
+        placeholderInput: 'in', placeholderOutput: 'out',
         audioBlocked: 'The browser blocked audio. Press "Preview" once to unlock it.',
       },
     }
@@ -335,7 +339,7 @@ window.__ModuleLoader__.load({
         const rounded = Math.max(0.01, Math.round(amount * 100) / 100)
         if (rounded < view.config.minAmount) return
         const pack = view.config.voice === 'dabaifan' ? 'dabaifan' : 'alipay'
-        const text = `${PACKS[pack].label} ${rounded.toFixed(2)} 元`
+        const text = `${t(pack)} ${rounded.toFixed(2)} ${t('currencyUnit')}`
         log = [{ time: Date.now(), turn: record.turn, amount: rounded, pack, source, text, provider: record.provider ?? '', model: record.model ?? '' }, ...log].slice(0, 20)
         writeJSON(LOG_KEY, log)
         emit({ log })
@@ -471,8 +475,8 @@ window.__ModuleLoader__.load({
       const costMeter = v.status.costMeter
       const catalogOf = (provider, model) => v.pricing?.providers?.[provider]?.[model] ?? {}
       const pricingNote = v.pricing
-        ? `价格表：${v.pricing.source === 'dsh-cost-meter' ? 'dsh-cost-meter' : '插件内置'} · ${v.pricing.generatedAt ?? '—'} · ${v.pricing.count} 个模型 · USD→CNY ${v.pricing.fx}`
-        : '价格表读取中…'
+        ? `${t('pricingTable')}: ${v.pricing.source === 'dsh-cost-meter' ? 'dsh-cost-meter' : t('pricingBuiltin')} · ${v.pricing.generatedAt ?? '—'} · ${v.pricing.count} ${t('pricingModels')} · USD→CNY ${v.pricing.fx}`
+        : t('pricingReading')
       const updateModelPrice = (key, field, raw) => {
         const value = Number(raw)
         if (!Number.isFinite(value) || value < 0) return
@@ -488,12 +492,12 @@ window.__ModuleLoader__.load({
           h('span', { style: { display: 'inline-flex', gap: 6, alignItems: 'center' } },
             h('input', {
               className: 'cv-num', type: 'number', min: 0, step: 'any',
-              placeholder: catalog.input !== undefined ? String(catalog.input) : '输入',
+              placeholder: catalog.input !== undefined ? String(catalog.input) : t('placeholderInput'),
               value: entry.input ?? '', onChange: (event) => updateModelPrice(key, 'input', event.target.value),
             }),
             h('input', {
               className: 'cv-num', type: 'number', min: 0, step: 'any',
-              placeholder: catalog.output !== undefined ? String(catalog.output) : '输出',
+              placeholder: catalog.output !== undefined ? String(catalog.output) : t('placeholderOutput'),
               value: entry.output ?? '', onChange: (event) => updateModelPrice(key, 'output', event.target.value),
             })))
       }

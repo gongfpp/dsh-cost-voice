@@ -1,6 +1,6 @@
 {
   "name": "dsh-cost-voice",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "每轮会话结束后用支付宝或大白饭的声音播报本轮花费；金额优先取 dsh-cost-meter，否则按该轮模型单价估算。Per-turn spend voice announcements for DeepSeek Harness with Alipay or Dabaifan voice packs.",
   "type": "module",
   "license": "MIT",
