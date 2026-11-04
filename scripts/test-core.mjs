@@ -30,6 +30,10 @@ check('110 -> 一百一十', () => assert.deepEqual(integerClips(110), ['1', 'hu
 check('1001 -> 一千零一', () => assert.deepEqual(integerClips(1001), ['1', 'thousand', '0', '1']))
 check('1234', () => assert.deepEqual(integerClips(1234), ['1', 'thousand', '2', 'hundred', '3', 'ten', '4']))
 check('9999', () => assert.deepEqual(integerClips(9999), ['9', 'thousand', '9', 'hundred', '9', 'ten', '9']))
+check('10000 -> 一万', () => assert.deepEqual(integerClips(10000), ['1', 'ten-thousand']))
+check('10001 -> 一万零一', () => assert.deepEqual(integerClips(10001), ['1', 'ten-thousand', '0', '1']))
+check('11000 -> 一万一千', () => assert.deepEqual(integerClips(11000), ['1', 'ten-thousand', '1', 'thousand']))
+check('12345 -> 一万二千三百四十五', () => assert.deepEqual(integerClips(12345), ['1', 'ten-thousand', '2', 'thousand', '3', 'hundred', '4', 'ten', '5']))
 
 console.log('金额读法')
 check('0 -> 零点零一元', () => assert.deepEqual(amountClips(0), ['0', 'dot', '0', '1', 'yuan']))

@@ -31,9 +31,18 @@ window.__ModuleLoader__.load({
     }
     const DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
 
-    /** 0..9999 的中文读法 -> 片段名。 */
+    /** 0..99999999 的中文读法 -> 片段名（万以上借 ten-thousand 片段）。 */
     function integerClips(n) {
       if (n <= 0) return ['0']
+      if (n >= 10000) {
+        const high = Math.floor(n / 10000)
+        const rest = n % 10000
+        const out = [...integerClips(high), 'ten-thousand']
+        if (rest === 0) return out
+        // 「一万零一」「一万一千」中间的零在中文里要念出来。
+        if (rest < 1000) out.push('0')
+        return [...out, ...integerClips(rest)]
+      }
       const units = [[1000, 'thousand'], [100, 'hundred'], [10, 'ten'], [1, '']]
       const out = []
       let zeroPending = false
