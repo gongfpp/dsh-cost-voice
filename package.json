@@ -5,6 +5,7 @@
   "type": "module",
   "license": "MIT",
   "author": "gongfpp",
+  "icon": "./icon.png",
   "keywords": [
     "dsh",
     "dsh-plugin",

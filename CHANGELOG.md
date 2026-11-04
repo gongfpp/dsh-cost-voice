@@ -5,7 +5,7 @@
 - 仓库结构整理（不影响运行时行为）：开发脚本 `tools/` → `scripts/`；音色渲染素材与原始截图移入 `dev/`，不再进仓库；`docs/` 去重，只保留 README 用的一张预览图与目录条目模板。
 - `package.json` 的 `files` 白名单改为显式文件名（`docs/preview-settings.png`），避免 `docs/` 里新增的图被自动打进包；`.gitignore` 补 `*.tgz`。
 - README 重写为面向使用者的结构（是什么 → 功能 → 安装 → 设置 → 听不到声音 → 金额口径 → 限制 → 开发），补图标与 GitHub 社交预览图。
-- 图标换成网友二创的「吃白饭的蓝色大肥鱼」梗图（`icon.png`，256×256，社区 DeepSeek 鲸鱼娘形象；版权归原作者，仅作插件配图，与 DeepSeek 官方无关）。`package.json` 的 `./icon` 导出指向 `icon.png`；GitHub 社交预览图跟着改版，`scripts/build-social-preview.mjs` 改为把 `icon.png` 内联进 1280×640 分享图，避免两处图片手工同步漂移。
+- 图标换成网友二创的「吃白饭的蓝色大肥鱼」梗图（`icon.png`，256×256，社区 DeepSeek 鲸鱼娘形象；版权归原作者，仅作插件配图，与 DeepSeek 官方无关）。`package.json` 同时声明 `icon: "./icon.png"`（优先读取）与 `./icon` 导出；GitHub 社交预览图跟着改版，`scripts/build-social-preview.mjs` 改为把 `icon.png` 内联进 1280×640 分享图，避免两处图片手工同步漂移。
 
 ## 1.0.1 — 2026-11-04
 
