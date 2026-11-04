@@ -1,6 +1,6 @@
 # 每轮扣款语音播报 · dsh-cost-voice
 
-<img src="icon.svg" width="64" align="right" alt="">
+<img src="icon.svg" width="64" align="right" alt="每轮扣款语音播报图标">
 
 每轮会话结束，用支付宝或者「大白饭」的声音报一句本轮花了多少钱——「支付宝到账，零点一二元」。
 
