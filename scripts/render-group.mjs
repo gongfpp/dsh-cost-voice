@@ -1,12 +1,12 @@
 // 渲染一段“逐字朗读”的音频并用 ASR 校验内容；校验不过就重试。
-// 用法：MIMO_API_KEY=... node tools/render-group.mjs <输出mp3> <要朗读的文本> <期望包含的字，如 五六七八九> <参考音频|音色描述|音色ID> <clone|voicedesign|preset> [最多尝试次数]
+// 用法：MIMO_API_KEY=... node scripts/render-group.mjs <输出mp3> <要朗读的文本> <期望包含的字，如 五六七八九> <参考音频|音色描述|音色ID> <clone|voicedesign|preset> [最多尝试次数]
 import { readFileSync, writeFileSync } from 'node:fs'
 
 const [output, text, expected, voiceArg, mode = 'clone', attemptsArg] = process.argv.slice(2)
 const apiKey = process.env.MIMO_API_KEY
 const attempts = Number(attemptsArg ?? 5)
 if (!output || !text || !expected || !voiceArg || !apiKey) {
-  console.error('用法：MIMO_API_KEY=... node tools/render-group.mjs <输出mp3> <文本> <期望字> <音色来源> <clone|voicedesign|preset> [尝试次数]')
+  console.error('用法：MIMO_API_KEY=... node scripts/render-group.mjs <输出mp3> <文本> <期望字> <音色来源> <clone|voicedesign|preset> [尝试次数]')
   process.exit(1)
 }
 const baseURL = (process.env.MIMO_BASE_URL || (apiKey.trim().startsWith('tp-') ? 'https://token-plan-cn.xiaomimimo.com/v1' : 'https://api.xiaomimimo.com/v1')).replace(/\/+$/, '')

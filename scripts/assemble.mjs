@@ -1,6 +1,6 @@
 // 把金额转成中文读法，并用音频片段拼出一句话。
-// 用法：node tools/assemble.mjs <片段目录> <金额> <输出文件> [前缀片段名]
-// 例：  node tools/assemble.mjs assets/voices/alipay-zh 0.12 samples/a.mp3 prefix-receipt
+// 用法：node scripts/assemble.mjs <片段目录> <金额> <输出文件> [前缀片段名]
+// 例：  node scripts/assemble.mjs assets/voices/alipay-zh 0.12 dev/samples/a.mp3 prefix-receipt
 import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'

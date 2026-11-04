@@ -1,5 +1,5 @@
 // 把音色包片段就地规范化：裁掉首尾静音 + 静态增益到统一响度，运行时才能直接拼接。
-// 用法：node tools/normalize-pack.mjs <包目录> [目标平均音量dB，默认 -18]
+// 用法：node scripts/normalize-pack.mjs <包目录> [目标平均音量dB，默认 -18]
 import { execFileSync, spawnSync } from 'node:child_process'
 import { copyFileSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -7,7 +7,7 @@ import { join } from 'node:path'
 
 const [packDir, targetArg] = process.argv.slice(2)
 if (!packDir) {
-  console.error('用法：node tools/normalize-pack.mjs <包目录> [目标平均音量dB]')
+  console.error('用法：node scripts/normalize-pack.mjs <包目录> [目标平均音量dB]')
   process.exit(1)
 }
 const targetDb = Number(targetArg ?? -18)

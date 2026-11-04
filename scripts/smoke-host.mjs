@@ -1,5 +1,5 @@
 // 离线冒烟：用假的 ctx 跑一遍宿主半，验证事件折叠、轮次事实接口与片段路由。
-// 用法：node tools/smoke-host.mjs
+// 用法：node scripts/smoke-host.mjs
 import { pathToFileURL } from 'node:url'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'

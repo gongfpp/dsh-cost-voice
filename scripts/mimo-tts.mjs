@@ -1,12 +1,12 @@
 // 调小米 MiMo TTS（voicedesign / 预置音色）生成一句音频。
-// 用法：MIMO_API_KEY=... node tools/mimo-tts.mjs <输出文件> <文本> [音色描述或音色ID] [model]
+// 用法：MIMO_API_KEY=... node scripts/mimo-tts.mjs <输出文件> <文本> [音色描述或音色ID] [model]
 // model: mimo-v2.5-tts-voicedesign（默认，第二段参数当音色描述） | mimo-v2.5-tts（第二段参数当预置音色ID）
 import { readFileSync, writeFileSync } from 'node:fs'
 
 const [output, text, voiceArg, modelArg] = process.argv.slice(2)
 const apiKey = process.env.MIMO_API_KEY
 if (!output || !text) {
-  console.error('用法：MIMO_API_KEY=... node tools/mimo-tts.mjs <输出文件> <文本> [音色描述/音色ID] [model]')
+  console.error('用法：MIMO_API_KEY=... node scripts/mimo-tts.mjs <输出文件> <文本> [音色描述/音色ID] [model]')
   process.exit(1)
 }
 if (!apiKey) {

@@ -1,5 +1,5 @@
 // 预渲染常用金额整句：避免数字拼接造成的音色/断句不统一。
-// 用法：MIMO_API_KEY=... node tools/render-amounts.mjs <输出目录> <声线参考音频> [最低分] [最高分]
+// 用法：MIMO_API_KEY=... node scripts/render-amounts.mjs <输出目录> <声线参考音频> [最低分] [最高分]
 // 生成 0.01–1.00 元共 100 句：<分>.mp3，文本如「大白饭到账，零点一二元」。
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -7,7 +7,7 @@ import { join } from 'node:path'
 const [outDir, refArg, minArg, maxArg] = process.argv.slice(2)
 const apiKey = process.env.MIMO_API_KEY
 if (!outDir || !refArg || !apiKey) {
-  console.error('用法：MIMO_API_KEY=... node tools/render-amounts.mjs <输出目录> <声线参考音频> [最低分] [最高分]')
+  console.error('用法：MIMO_API_KEY=... node scripts/render-amounts.mjs <输出目录> <声线参考音频> [最低分] [最高分]')
   process.exit(1)
 }
 const from = Number(minArg ?? 1)

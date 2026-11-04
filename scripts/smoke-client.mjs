@@ -1,5 +1,5 @@
 // 离线冒烟：用假的浏览器环境加载客户端半，验证模块格式、插槽注册与页面组件可渲染。
-// 用法：node tools/smoke-client.mjs
+// 用法：node scripts/smoke-client.mjs
 import { pathToFileURL } from 'node:url'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'

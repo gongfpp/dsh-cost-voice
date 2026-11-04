@@ -1,5 +1,5 @@
 // 批量渲染一个音色包：每段文本 -> 一个 mp3 片段。
-// 用法：MIMO_API_KEY=... node tools/build-pack.mjs <输出目录> <模式> <音色参数文件或值>
+// 用法：MIMO_API_KEY=... node scripts/build-pack.mjs <输出目录> <模式> <音色参数文件或值>
 // 模式：clone（参考音频路径） | voicedesign（音色描述文本） | preset（预置音色 ID）
 // 片段清单写在本文件 CLIPS 里，可按音色包调整。
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
@@ -16,7 +16,7 @@ export const CLIPS = [
 const [outDir, mode, voiceArg] = process.argv.slice(2)
 const apiKey = process.env.MIMO_API_KEY
 if (!outDir || !mode || !voiceArg) {
-  console.error('用法：MIMO_API_KEY=... node tools/build-pack.mjs <输出目录> <clone|voicedesign|preset> <参考音频|音色描述|音色ID>')
+  console.error('用法：MIMO_API_KEY=... node scripts/build-pack.mjs <输出目录> <clone|voicedesign|preset> <参考音频|音色描述|音色ID>')
   process.exit(1)
 }
 if (!apiKey) {

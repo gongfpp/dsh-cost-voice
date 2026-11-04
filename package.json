@@ -36,7 +36,7 @@
     "icon.svg",
     "assets/voices/**/*.mp3",
     "assets/pricing.json",
-    "docs/*.png",
+    "docs/preview-settings.png",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"

@@ -1,5 +1,10 @@
 # Changelog
 
+## 未发布
+
+- 仓库结构整理（不影响运行时行为）：开发脚本 `tools/` → `scripts/`；音色渲染素材与原始截图移入 `dev/`，不再进仓库；`docs/` 去重，只保留 README 用的一张预览图与目录条目模板。
+- `package.json` 的 `files` 白名单改为显式文件名（`docs/preview-settings.png`），避免 `docs/` 里新增的图被自动打进包；`.gitignore` 补 `*.tgz`。
+
 ## 1.0.1 — 2026-11-04
 
 - 与 npm 发布版本对齐（1.0.0 首发，1.0.1 同内容）。

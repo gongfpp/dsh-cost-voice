@@ -1,6 +1,6 @@
 node_modules/
-samples/
-browser-screenshots/
+dev/
+*.tgz
 *.log
 .DS_Store
 Thumbs.db

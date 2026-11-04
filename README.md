@@ -85,16 +85,19 @@ dsh plugin --profile web add D:\path\to\dsh-cost-voice
 ```
 index.js                 宿主半：轮次事实（turn/end + 用量 + 费用）、价格目录、音频下发
 client.js                客户端半：轮询、金额计算、音频拼接播放、插件页
-assets/voices/alipay-zh  支付宝片段
-assets/voices/dabaifan-clone    大白饭片段
-assets/voices/dabaifan-amounts  大白饭整句（1.mp3–100.mp3 = 0.01–1.00 元）
-assets/pricing.json      价格表快照
-tools/                   音色渲染、ASR 校验、响度统一、离线冒烟脚本
+assets/                  随包分发：音色片段、价格表快照
+  voices/alipay-zh       支付宝片段
+  voices/dabaifan-clone  大白饭片段
+  voices/dabaifan-amounts  大白饭整句（1.mp3–100.mp3 = 0.01–1.00 元）
+  pricing.json           价格表快照
+scripts/                 开发脚本（不随包）：音色渲染、ASR 校验、响度统一、离线冒烟
+dev/                     本地素材（不进仓库、不随包）：dev/samples/ 试听音频、dev/screenshots/ 原始截图
+docs/                    仓库文档：preview-settings.png（随包，README 引用）、catalog-entry.yml（仅仓库用，不随包）
 ```
 
 ```sh
-node tools/smoke-host.mjs     # 宿主半离线冒烟
-node tools/smoke-client.mjs   # 客户端半离线冒烟
+node scripts/smoke-host.mjs     # 宿主半离线冒烟
+node scripts/smoke-client.mjs   # 客户端半离线冒烟
 ```
 
 ## 致谢与声明

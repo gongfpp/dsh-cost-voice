@@ -1,5 +1,5 @@
 // 把一段「逐字朗读」的音频按静音切成多个片段，用于生成可拼接的音色包。
-// 用法：node tools/split-clips.mjs <输入音频> <输出目录> <片段名1,片段名2,...> [噪声阈值dB] [最短静音秒]
+// 用法：node scripts/split-clips.mjs <输入音频> <输出目录> <片段名1,片段名2,...> [噪声阈值dB] [最短静音秒]
 import { spawnSync } from 'node:child_process'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -7,7 +7,7 @@ import { join } from 'node:path'
 
 const [input, outDir, namesArg, noiseArg, gapArg] = process.argv.slice(2)
 if (!input || !outDir || !namesArg) {
-  console.error('用法：node tools/split-clips.mjs <输入音频> <输出目录> <名称1,名称2,...> [噪声阈值dB] [最短静音秒]')
+  console.error('用法：node scripts/split-clips.mjs <输入音频> <输出目录> <名称1,名称2,...> [噪声阈值dB] [最短静音秒]')
   process.exit(1)
 }
 const names = namesArg.split(',').map((s) => s.trim()).filter(Boolean)

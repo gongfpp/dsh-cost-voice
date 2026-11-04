@@ -1,11 +1,11 @@
 // 用小米 MiMo ASR 转写一段音频，用来验证拼接/合成结果的实际内容。
-// 用法：MIMO_API_KEY=... node tools/mimo-asr.mjs <音频文件> [...更多文件]
+// 用法：MIMO_API_KEY=... node scripts/mimo-asr.mjs <音频文件> [...更多文件]
 import { readFileSync } from 'node:fs'
 
 const apiKey = process.env.MIMO_API_KEY
 const files = process.argv.slice(2)
 if (!apiKey || files.length === 0) {
-  console.error('用法：MIMO_API_KEY=... node tools/mimo-asr.mjs <音频文件> [...]')
+  console.error('用法：MIMO_API_KEY=... node scripts/mimo-asr.mjs <音频文件> [...]')
   process.exit(1)
 }
 const baseURL = (process.env.MIMO_BASE_URL || 'https://api.xiaomimimo.com/v1').replace(/\/+$/, '')

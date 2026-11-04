@@ -1,5 +1,5 @@
 // 校验预渲染的金额整句：ASR 文不对题或时长异常就重渲染。
-// 用法：MIMO_API_KEY=... node tools/verify-amounts.mjs <目录> <声线参考音频> [最低分] [最高分]
+// 用法：MIMO_API_KEY=... node scripts/verify-amounts.mjs <目录> <声线参考音频> [最低分] [最高分]
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
@@ -7,7 +7,7 @@ import { join } from 'node:path'
 const [outDir, refArg, minArg, maxArg] = process.argv.slice(2)
 const apiKey = process.env.MIMO_API_KEY
 if (!outDir || !refArg || !apiKey) {
-  console.error('用法：MIMO_API_KEY=... node tools/verify-amounts.mjs <目录> <声线参考音频> [最低分] [最高分]')
+  console.error('用法：MIMO_API_KEY=... node scripts/verify-amounts.mjs <目录> <声线参考音频> [最低分] [最高分]')
   process.exit(1)
 }
 const from = Number(minArg ?? 1)
