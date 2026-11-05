@@ -83,6 +83,11 @@ npm pack --dry-run               # 核对发布内容
 | `scripts/` | 音色渲染、ASR 校验、响度统一、离线冒烟（不随包） |
 | `dev/` | 本地素材与截图（不随包、不进仓库） |
 
+## 相关插件
+
+- **[谢谢卡尔 · dsh-thanks-carl](https://github.com/gongfpp/dsh-thanks-carl)** — 任务完成后让卡尔从屏幕边缘探头道谢，顺带提醒喝水、吃饭、休息；纯本地，不调用模型。
+- **[小说摸鱼 · dsh-novel-fish](https://github.com/gongfpp/dsh-novel-fish)** — 在聊天区域下方读本地小说，小说内容不会发给模型。
+
 ## 致谢与声明
 
 - 支付宝播报片段来自开源项目 [Reathin/XVoice](https://github.com/Reathin/XVoice)（其 README 注明仅供娱乐）。
