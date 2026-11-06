@@ -533,7 +533,7 @@ window.__ModuleLoader__.load({
 .cv-switch input { width: 16px; height: 16px; accent-color: var(--dsw-alias-brand-primary); }
 .cv-actions { display: flex; gap: 8px; }
 .cv-actions button, .cv-log button { border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); border-radius: 8px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
-.cv-actions button.primary { border-color: transparent; background: var(--dsw-alias-brand-primary); color: #fff; }
+.cv-actions button.primary { border-color: transparent; background: var(--dsw-alias-brand-primary); color: var(--dsw-alias-bg-base); }
 .cv-log { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .cv-log li { display: flex; justify-content: space-between; gap: 12px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
 .cv-log b { color: var(--dsw-alias-label-primary); font-weight: 600; }
