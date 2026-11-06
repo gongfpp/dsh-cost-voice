@@ -68,7 +68,7 @@ dsh plugin --profile web add dsh-cost-voice
 ## 开发
 
 ```bash
-npm test                        # 70 项测试 + 宿主/客户端冒烟；模拟时钟，无需浏览器
+npm test                        # 76 项测试 + 宿主/客户端冒烟；模拟时钟，无需浏览器
 node scripts/test-client.mjs    # 单跑客户端行为回归（游标、设置、播放失败与重试等）
 node scripts/shrink-audio.mjs    # 音频统一压到 32 kbps（--check 只看不改）
 npm pack --dry-run               # 核对发布内容
