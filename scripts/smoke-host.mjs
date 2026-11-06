@@ -40,7 +40,6 @@ emit('s1', {
   data: { turn: 1, step: 1, message: { source: { provider: 'opencode-go', model: 'deepseek-v4.1-flash' } }, usage: { inputTokens: 1200, outputTokens: 340, cacheReadTokens: 800 } },
 })
 emit('s1', { type: 'turn/end', seq: 13, data: { turn: 1, reason: { kind: 'completed' } } })
-await new Promise((resolve) => setTimeout(resolve, 30))
 
 const feed = await routes.get('/api/cost-voice/turns').fetch(new Request('http://x/api/cost-voice/turns?sessionId=s1&since=0'))
 const feedBody = await feed.json()
@@ -69,7 +68,7 @@ checks.amountClipBytes = (await amountClip.arrayBuffer()).byteLength
 const historyFeed = await routes.get('/api/cost-voice/turns').fetch(new Request('http://x/api/cost-voice/turns?sessionId=s2&since=0'))
 const historyBody = await historyFeed.json()
 checks.historyModels = historyBody.models
-if (!Array.isArray(historyBody.models) || historyBody.models[0]?.model !== 'deepseek-v4.1-flash') failHistory = true
+const failHistory = !Array.isArray(historyBody.models) || historyBody.models[0]?.model !== 'deepseek-v4.1-flash'
 
 const pricingResponse = await routes.get('/api/cost-voice/pricing').fetch(new Request('http://x/api/cost-voice/pricing'))
 const pricing = await pricingResponse.json()
@@ -79,7 +78,6 @@ checks.pricingSource = pricing.source
 checks.pricingCount = pricing.count
 checks.deepseekPrice = deepseek
 
-let failHistory = false
 const fail = []
 if (checks.feedStatus !== 200) fail.push('feed status')
 if (!checks.hasEvent || checks.turn !== 1 || checks.kind !== 'completed') fail.push('turn record')

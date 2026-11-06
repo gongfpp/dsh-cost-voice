@@ -59,9 +59,14 @@ window.__ModuleLoader__.load({
       return out
     }
 
+    /** 真正的零保持零；正数不足一分时仍播一分，避免听成免费。 */
+    function roundedAmount(amount) {
+      return amount > 0 ? Math.max(0.01, Math.round(amount * 100) / 100) : 0
+    }
+
     /** 金额 -> 片段名（整数 + 点 + 小数逐位 + 元）。 */
     function amountClips(amount) {
-      const clamped = Math.max(0.01, Math.round(amount * 100) / 100)
+      const clamped = roundedAmount(amount)
       const [whole, fraction = ''] = clamped.toFixed(2).split('.')
       const clips = integerClips(Number(whole))
       const digits = fraction.replace(/0+$/, '')
@@ -136,7 +141,10 @@ window.__ModuleLoader__.load({
         statusError: '状态读取失败：', estimateSuffix: '（估算）', turnLabel: '轮',
         currencyUnit: '元', pricingTable: '价格表', pricingBuiltin: '插件内置', pricingModels: '个模型',
         placeholderInput: '输入', placeholderOutput: '输出',
-        audioBlocked: '浏览器暂未允许播放声音，点一次「试听」后再继续。',
+        audioBlocked: '浏览器暂未允许播放声音，点一次「试听」后再重试。',
+        audioUnsupported: '浏览器不支持音频播放。',
+        audioLoadFailed: '音频片段读取失败', audioFailed: '播放失败',
+        queued: '排队中', playing: '播放中', failed: '播放失败', skipped: '队列已满，未播放', retry: '重试',
       },
       en: {
         on: 'On', off: 'Off', yes: 'Yes', no: 'No',
@@ -157,7 +165,10 @@ window.__ModuleLoader__.load({
         statusError: 'Status request failed: ', estimateSuffix: ' (estimate)', turnLabel: 'turn',
         currencyUnit: 'CNY', pricingTable: 'Price table', pricingBuiltin: 'bundled', pricingModels: 'models',
         placeholderInput: 'in', placeholderOutput: 'out',
-        audioBlocked: 'The browser blocked audio. Press "Preview" once to unlock it.',
+        audioBlocked: 'The browser blocked audio. Press "Preview", then retry.',
+        audioUnsupported: 'This browser does not support audio playback.',
+        audioLoadFailed: 'Could not load audio clip', audioFailed: 'Playback failed',
+        queued: 'Queued', playing: 'Playing', failed: 'Playback failed', skipped: 'Queue full; not played', retry: 'Retry',
       },
     }
     const t = (key) => (I18N[ACTIVE_LOCALE] ?? I18N.zh)[key] ?? I18N.zh[key] ?? key
@@ -183,7 +194,7 @@ window.__ModuleLoader__.load({
         log,
         pricing: null,
         models: [],
-        status: { costMeter: null, error: '', playing: false, lastText: '', sessionId: null, audio: 'idle' },
+        status: { costMeter: null, error: '', audioError: '', playing: false, sessionId: null, audio: 'idle' },
       }
       const listeners = new Set()
       const emit = (patch) => {
@@ -195,12 +206,23 @@ window.__ModuleLoader__.load({
       let timer = null
       let sessionId = null
       let cursor = 0
+      let initialized = false
+      let sessionGeneration = 0
       let busy = false
       let audioContext = null
+      let cancelPlayback = null
       const BUFFER_LIMIT = 512
       const buffers = new Map()
       const queue = []
       let pumping = false
+
+      const updateLog = (id, patch) => {
+        if (!id || stopped) return
+        log = log.map((entry) => entry.id === id ? { ...entry, ...patch } : entry)
+        writeJSON(LOG_KEY, log)
+        emit({ log })
+      }
+      const playbackError = (error) => String(error?.message ?? t('audioFailed'))
 
       const pruneSeen = () => {
         const cutoff = Date.now() - 2 * 24 * 60 * 60_000
@@ -210,12 +232,21 @@ window.__ModuleLoader__.load({
       }
 
       const ensureAudio = () => {
+        if (stopped) throw new Error('Player disposed')
         if (!audioContext) {
           const Audio = window.AudioContext || window.webkitAudioContext
-          if (!Audio) return null
+          if (!Audio) throw new Error(t('audioUnsupported'))
           audioContext = new Audio()
         }
         return audioContext
+      }
+
+      // 必须在按钮的用户手势内调用 resume，不能等下载完音频才解锁。
+      const unlockAudio = () => {
+        try {
+          const context = ensureAudio()
+          if (context.state === 'suspended') void context.resume().catch(() => {})
+        } catch (error) { setStatus({ audioError: playbackError(error) }) }
       }
 
       const CLIP_VERSION = 3
@@ -224,9 +255,8 @@ window.__ModuleLoader__.load({
         const cached = buffers.get(name)
         if (cached) return cached
         const context = ensureAudio()
-        if (!context) throw new Error('浏览器不支持音频播放')
         const response = await fetch(`api/cost-voice/clip?name=${encodeURIComponent(name)}&v=${CLIP_VERSION}`, { cache: 'force-cache' })
-        if (!response.ok) throw new Error(`音频片段读取失败 (${response.status})`)
+        if (!response.ok) throw new Error(`${t('audioLoadFailed')} (${response.status})`)
         const bytes = await response.arrayBuffer()
         const buffer = await context.decodeAudioData(bytes)
         if (buffers.size >= BUFFER_LIMIT) buffers.delete(buffers.keys().next().value)
@@ -245,23 +275,44 @@ window.__ModuleLoader__.load({
 
       const playBuffers = async (buffersList) => {
         const context = ensureAudio()
-        if (!context) { setStatus({ audio: 'unsupported' }); return }
-        if (context.state === 'suspended') { try { await context.resume() } catch { /* 等用户手势 */ } }
+        if (context.state === 'suspended') {
+          setStatus({ audio: context.state })
+          let timeout
+          try {
+            await Promise.race([
+              context.resume(),
+              new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error(t('audioBlocked'))), 1500) }),
+            ])
+          } finally { clearTimeout(timeout) }
+        }
+        if (context.state !== 'running') throw new Error(t('audioBlocked'))
+        if (stopped) return
         setStatus({ audio: context.state, playing: true })
         const master = context.createGain()
-        master.gain.value = Math.max(0, Math.min(1, view.config.volume))
-        master.connect(context.destination)
-        let at = context.currentTime + 0.03
-        const gap = Math.max(0, Number(view.config.gapMs) || 0) / 1000
-        for (const buffer of buffersList) {
-          const source = context.createBufferSource()
-          source.buffer = buffer
-          source.connect(master)
-          source.start(at)
-          at += buffer.duration + gap
+        const sources = []
+        try {
+          master.gain.value = Math.max(0, Math.min(1, view.config.volume))
+          master.connect(context.destination)
+          let at = context.currentTime + 0.03
+          const gap = Math.max(0, Number(view.config.gapMs) || 0) / 1000
+          for (const buffer of buffersList) {
+            const source = context.createBufferSource()
+            sources.push(source)
+            source.buffer = buffer
+            source.connect(master)
+            source.start(at)
+            at += buffer.duration + gap
+          }
+          const totalMs = Math.max(0, (at - context.currentTime) * 1000)
+          await new Promise((resolve) => {
+            const timeout = setTimeout(resolve, totalMs)
+            cancelPlayback = () => { clearTimeout(timeout); resolve() }
+          })
+        } finally {
+          cancelPlayback = null
+          for (const source of sources) { try { source.stop(); source.disconnect() } catch { /* 已结束或已关闭 */ } }
+          master.disconnect()
         }
-        const totalMs = Math.max(0, (at - context.currentTime) * 1000)
-        await new Promise((resolve) => setTimeout(resolve, totalMs))
       }
 
       const playClips = async (dir, clips) => {
@@ -273,7 +324,9 @@ window.__ModuleLoader__.load({
       const playAnnouncement = async (pack, amount) => {
         const cents = Math.round(amount * 100)
         if (pack === 'dabaifan' && cents >= 1 && cents <= 100) {
-          try { await playClips('dabaifan-amounts', [String(cents)]); return } catch { /* 还没预渲染到这一句就用拼接兜底 */ }
+          let whole
+          try { whole = await prefetch('dabaifan-amounts', [String(cents)]) } catch { /* 整句资源缺失时用拼接兜底 */ }
+          if (whole) { await playBuffers(whole); return }
         }
         await playClips(PACKS[pack].dir, [PACKS[pack].prefix, ...amountClips(amount)])
       }
@@ -283,19 +336,35 @@ window.__ModuleLoader__.load({
         if (pumping) return
         pumping = true
         try {
-          while (queue.length > 0) {
+          while (!stopped && queue.length > 0) {
             const job = queue.shift()
-            try { await playAnnouncement(job.pack, job.amount) } catch { /* 播放失败不打断会话 */ }
+            updateLog(job.id, { state: 'playing', error: '' })
+            try {
+              await playAnnouncement(job.pack, job.amount)
+              if (!stopped) {
+                updateLog(job.id, { state: 'played', error: '' })
+                setStatus({ audioError: '' })
+              }
+            } catch (error) {
+              if (!stopped) {
+                const message = playbackError(error)
+                updateLog(job.id, { state: 'failed', error: message })
+                setStatus({ audioError: message })
+              }
+            }
           }
         } finally {
           pumping = false
-          setStatus({ playing: false })
+          if (!stopped) setStatus({ playing: false })
         }
       }
 
-      const enqueue = (pack, amount) => {
-        queue.push({ pack, amount })
-        if (queue.length > 4) queue.splice(0, queue.length - 4)
+      const enqueue = (pack, amount, id) => {
+        if (stopped) return
+        queue.push({ pack, amount, id })
+        if (queue.length > 4) {
+          for (const dropped of queue.splice(0, queue.length - 4)) updateLog(dropped.id, { state: 'skipped' })
+        }
         setStatus({ playing: true })
         void pump()
       }
@@ -336,25 +405,27 @@ window.__ModuleLoader__.load({
         if (view.config.completedOnly && record.kind !== 'completed') return
         if (inQuietHours()) return
         const { amount, source } = resolveAmount(record)
-        const rounded = Math.max(0.01, Math.round(amount * 100) / 100)
-        if (rounded < view.config.minAmount) return
+        if (!Number.isFinite(amount) || amount < view.config.minAmount) return
+        const rounded = roundedAmount(amount)
         const pack = view.config.voice === 'dabaifan' ? 'dabaifan' : 'alipay'
         const text = `${t(pack)} ${rounded.toFixed(2)} ${t('currencyUnit')}`
-        log = [{ time: Date.now(), turn: record.turn, amount: rounded, pack, source, text, provider: record.provider ?? '', model: record.model ?? '' }, ...log].slice(0, 20)
+        log = [{ id: key, state: 'queued', error: '', time: Date.now(), turn: record.turn, amount: rounded, pack, source, text, provider: record.provider ?? '', model: record.model ?? '' }, ...log].slice(0, 20)
         writeJSON(LOG_KEY, log)
         emit({ log })
-        enqueue(pack, rounded)
+        enqueue(pack, rounded, key)
       }
 
       const poll = async () => {
         if (stopped || busy || !sessionId) return
         if (document.visibilityState !== 'visible') return
         busy = true
+        const generation = sessionGeneration
         try {
           const query = new URLSearchParams({ sessionId, since: String(cursor) })
           const response = await fetch(`api/cost-voice/turns?${query}`, { cache: 'no-store' })
           if (!response.ok) throw new Error(`状态接口 ${response.status}`)
           const data = await response.json()
+          if (stopped || generation !== sessionGeneration) return
           setStatus({ costMeter: Boolean(data.costMeter), error: '' })
           const seenModels = Array.isArray(data.models) ? data.models.slice(0, 6) : [...view.models]
           for (const record of data.events ?? []) {
@@ -362,17 +433,20 @@ window.__ModuleLoader__.load({
             const key = `${record.provider}/${record.model}`
             if (!seenModels.some((entry) => entry.key === key)) seenModels.unshift({ key, provider: record.provider, model: record.model })
           }
-          if (seenModels.length !== view.models.length) emit({ models: seenModels.slice(0, 6) })
-          if (Number.isSafeInteger(data.seq)) {
-            if (data.seq < cursor) cursor = 0
-            const baseline = cursor === 0
+          const nextModels = seenModels.slice(0, 6)
+          if (JSON.stringify(nextModels) !== JSON.stringify(view.models)) emit({ models: nextModels })
+          if (Number.isSafeInteger(data.seq) && data.seq >= 0) {
+            const baseline = !initialized || data.seq < cursor
+            initialized = true
             cursor = data.seq
             if (!baseline) for (const record of data.events ?? []) announce(record)
           }
         } catch (error) {
-          setStatus({ error: String(error?.message ?? error) })
+          if (!stopped && generation === sessionGeneration) setStatus({ error: String(error?.message ?? error) })
         } finally {
           busy = false
+          // 切换会话期间的旧请求不能覆盖新游标；它退场后立即取新会话基线。
+          if (!stopped && generation !== sessionGeneration) void poll()
         }
       }
 
@@ -386,7 +460,9 @@ window.__ModuleLoader__.load({
         selectSession(id) {
           if (sessionId === id) return
           sessionId = id
+          sessionGeneration += 1
           cursor = 0
+          initialized = false
           setStatus({ sessionId: id })
           void poll()
         },
@@ -396,8 +472,16 @@ window.__ModuleLoader__.load({
           writeJSON(CONFIG_KEY, next)
         },
         preview(amount = 0.12) {
+          unlockAudio()
           const pack = view.config.voice === 'dabaifan' ? 'dabaifan' : 'alipay'
           enqueue(pack, amount)
+        },
+        retry(id) {
+          const entry = log.find((item) => item.id === id)
+          if (!entry || !['failed', 'skipped'].includes(entry.state)) return
+          unlockAudio()
+          updateLog(id, { state: 'queued', error: '' })
+          enqueue(entry.pack, entry.amount, id)
         },
         clearLog() {
           log = []
@@ -406,6 +490,9 @@ window.__ModuleLoader__.load({
         },
         dispose() {
           stopped = true
+          sessionGeneration += 1
+          queue.length = 0
+          if (cancelPlayback) cancelPlayback()
           clearInterval(timer)
           document.removeEventListener('visibilitychange', poll)
           if (audioContext) void audioContext.close().catch(() => {})
@@ -436,7 +523,7 @@ window.__ModuleLoader__.load({
 .cv-switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
 .cv-switch input { width: 16px; height: 16px; accent-color: var(--dsw-alias-brand-primary); }
 .cv-actions { display: flex; gap: 8px; }
-.cv-actions button { border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); border-radius: 8px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
+.cv-actions button, .cv-log button { border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); border-radius: 8px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
 .cv-actions button.primary { border-color: transparent; background: var(--dsw-alias-brand-primary); color: #fff; }
 .cv-log { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .cv-log li { display: flex; justify-content: space-between; gap: 12px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
@@ -478,10 +565,17 @@ window.__ModuleLoader__.load({
         ? `${t('pricingTable')}: ${v.pricing.source === 'dsh-cost-meter' ? 'dsh-cost-meter' : t('pricingBuiltin')} · ${v.pricing.generatedAt ?? '—'} · ${v.pricing.count} ${t('pricingModels')} · USD→CNY ${v.pricing.fx}`
         : t('pricingReading')
       const updateModelPrice = (key, field, raw) => {
-        const value = Number(raw)
-        if (!Number.isFinite(value) || value < 0) return
         const next = { ...(c.modelPrices ?? {}) }
-        next[key] = { ...(next[key] ?? {}), [field]: value }
+        const entry = { ...(next[key] ?? {}) }
+        if (raw.trim() === '') {
+          delete entry[field]
+        } else {
+          const value = Number(raw)
+          if (!Number.isFinite(value) || value < 0) return
+          entry[field] = value
+        }
+        if (Object.keys(entry).length > 0) next[key] = entry
+        else delete next[key]
         update({ modelPrices: next })
       }
       const modelPriceRow = ({ key, provider, model }) => {
@@ -541,9 +635,13 @@ window.__ModuleLoader__.load({
           v.log.length === 0 ? h('p', { className: 'cv-note' }, t('emptyLog')) : h('ul', { className: 'cv-log' },
             v.log.map((entry) => h('li', { key: `${entry.time}-${entry.turn}` },
               h('span', null, `${new Date(entry.time).toLocaleTimeString()} · ${t('turnLabel')} ${entry.turn}`),
-              h('b', null, `${entry.text}${entry.source === 'estimate' ? t('estimateSuffix') : ''}`)))),
+              h('b', null, `${entry.text}${entry.source === 'estimate' ? t('estimateSuffix') : ''}`),
+              entry.state && entry.state !== 'played' ? h('span', { className: entry.state === 'failed' ? 'cv-error' : '', title: entry.error || undefined },
+                t(entry.state),
+                ['failed', 'skipped'].includes(entry.state) ? h('button', { type: 'button', onClick: () => controller.retry(entry.id) }, t('retry')) : null) : null))),
           v.status.error ? h('p', { className: 'cv-error' }, `${t('statusError')}${v.status.error}`) : null,
-          v.status.audio === 'suspended' ? h('p', { className: 'cv-note cv-warn' }, t('audioBlocked')) : null,
+          v.status.audioError ? h('p', { className: 'cv-error', role: 'alert' }, v.status.audioError) : null,
+          v.status.audio === 'suspended' && !v.status.audioError ? h('p', { className: 'cv-note cv-warn' }, t('audioBlocked')) : null,
         ))
     }
 

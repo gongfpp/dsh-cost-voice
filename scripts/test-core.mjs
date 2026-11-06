@@ -36,7 +36,8 @@ check('11000 -> 一万一千', () => assert.deepEqual(integerClips(11000), ['1',
 check('12345 -> 一万二千三百四十五', () => assert.deepEqual(integerClips(12345), ['1', 'ten-thousand', '2', 'thousand', '3', 'hundred', '4', 'ten', '5']))
 
 console.log('金额读法')
-check('0 -> 零点零一元', () => assert.deepEqual(amountClips(0), ['0', 'dot', '0', '1', 'yuan']))
+check('0 -> 零元，不虚增一分钱', () => assert.deepEqual(amountClips(0), ['0', 'yuan']))
+check('正数不足一分 -> 零点零一元', () => assert.deepEqual(amountClips(0.001), ['0', 'dot', '0', '1', 'yuan']))
 check('0.12 -> 零点一二元', () => assert.deepEqual(amountClips(0.12), ['0', 'dot', '1', '2', 'yuan']))
 check('1.5 -> 一点五元', () => assert.deepEqual(amountClips(1.5), ['1', 'dot', '5', 'yuan']))
 check('12 -> 十二元', () => assert.deepEqual(amountClips(12), ['ten', '2', 'yuan']))

@@ -1,4 +1,4 @@
-// 宿主半单测：费用归一的 found 语义、价格表换算、用量累加。
+// 宿主半单测：费用 found 语义、价格换算、用量累加与异步 feed 快照。
 // 用法：node scripts/test-host.mjs
 import assert from 'node:assert/strict'
 import { dirname, join } from 'node:path'
@@ -63,5 +63,165 @@ check('忽略空值与负数', () => {
   addUsage(usage, undefined)
   assert.deepEqual(usage, emptyUsage())
 })
+
+// 手动推进 timeout，不依赖真实 sleep；同时验证已完成的费用等待会清理 timer。
+const deferred = () => {
+  let resolve, reject
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no })
+  return { promise, resolve, reject }
+}
+const checkAsync = async (name, fn) => {
+  const originalSet = globalThis.setTimeout
+  const originalClear = globalThis.clearTimeout
+  const timers = new Map()
+  let nextId = 0
+  let cleared = 0
+  globalThis.setTimeout = (callback, delay) => {
+    assert.equal(delay, 1500)
+    const id = ++nextId
+    timers.set(id, callback)
+    return id
+  }
+  globalThis.clearTimeout = (id) => { cleared += 1; timers.delete(id) }
+  try {
+    await fn({
+      get size() { return timers.size },
+      get cleared() { return cleared },
+      fire() {
+        assert.equal(timers.size, 1)
+        const [id, callback] = timers.entries().next().value
+        timers.delete(id)
+        callback()
+      },
+    })
+    assert.equal(timers.size, 0, '费用完成后不得遗留 1.5 秒 timer')
+    passed += 1
+    console.log(`  ok  ${name}`)
+  } finally {
+    globalThis.setTimeout = originalSet
+    globalThis.clearTimeout = originalClear
+  }
+}
+const makeHarness = (getTurnCost) => {
+  const routes = new Map()
+  let onEvent
+  host.apply({
+    on(name, handler) { assert.equal(name, 'session/event'); onEvent = handler },
+    effect(fn) { fn() },
+    get(name) { return name === 'costMeter' && getTurnCost ? { getTurnCost } : undefined },
+    connection: { fetch: { register(route) { routes.set(route.path, route); return () => {} } } },
+  })
+  return {
+    finish(sessionId, turn, model = `model-${turn}`) {
+      const emit = (type, offset, data) => onEvent({ id: sessionId }, { type, seq: turn * 10 + offset, data })
+      emit('turn/start', 0, { turn })
+      emit('request/context', 1, { provider: 'test-provider', model })
+      emit('assistant/message', 2, { turn, usage: { inputTokens: 100, outputTokens: 20 } })
+      emit('turn/end', 3, { turn, reason: { kind: 'completed' } })
+    },
+    feed(sessionId, since = 0) {
+      return routes.get('/api/cost-voice/turns').fetch(new Request(`http://x/api/cost-voice/turns?sessionId=${sessionId}&since=${since}`))
+        .then((response) => response.json())
+    },
+  }
+}
+
+console.log('异步轮次 feed')
+await checkAsync('费用延期期间跨会话和同会话新轮次均不被游标跳过', async (timers) => {
+  const cost = deferred()
+  const started = deferred()
+  const calls = []
+  const harness = makeHarness((...args) => {
+    calls.push(args)
+    if (args[0] === 'a' && args[1] === 10) { started.resolve(); return cost.promise }
+    return { found: true, cost: 0.25 }
+  })
+  harness.finish('a', 1)
+  const first = harness.feed('a')
+  await started.promise
+  assert.equal(timers.size, 1)
+  harness.finish('b', 1, 'other-session')
+  harness.finish('a', 2)
+  cost.resolve({ found: true, cost: 1.23 })
+  const body = await first
+  assert.equal(body.seq, 1)
+  assert.deepEqual(body.events.map((row) => row.seq), [1])
+  assert.equal(body.events[0].costCny, 1.23)
+  assert.equal(body.events[0].costFound, true)
+  assert.deepEqual(body.models.map((row) => row.model), ['model-1'])
+  assert.deepEqual(calls[0], ['a', 10, 13, 'CNY'])
+  assert.equal(timers.size, 0)
+  assert.equal(timers.cleared, 1)
+  const next = await harness.feed('a', body.seq)
+  assert.equal(next.seq, 3)
+  assert.deepEqual(next.events.map((row) => [row.seq, row.sessionId, row.turn]), [[3, 'a', 2]])
+  assert.deepEqual((await harness.feed('b')).events.map((row) => [row.seq, row.sessionId]), [[2, 'b']])
+  assert.deepEqual((await harness.feed('a', next.seq)).events, [])
+})
+
+await checkAsync('超时保留本次记录与快照游标，延期金额仍可落地且不吞新轮次', async (timers) => {
+  const cost = deferred()
+  const started = deferred()
+  const harness = makeHarness((sessionId, startSeq) => {
+    if (sessionId === 'a' && startSeq === 10) { started.resolve(); return cost.promise }
+    return { found: true, cost: 0 }
+  })
+  harness.finish('a', 1)
+  const first = harness.feed('a')
+  await started.promise
+  harness.finish('b', 1)
+  harness.finish('a', 2)
+  timers.fire()
+  const body = await first
+  assert.equal(body.seq, 1)
+  assert.deepEqual(body.events.map((row) => row.seq), [1])
+  assert.equal(body.events[0].costCny, null)
+  assert.equal(body.events[0].costFound, null)
+  assert.equal(timers.cleared, 1)
+  const next = await harness.feed('a', body.seq)
+  assert.equal(next.seq, 3)
+  assert.deepEqual(next.events.map((row) => [row.seq, row.costCny, row.costFound]), [[3, 0, true]])
+  cost.resolve({ found: true, cost: 9 })
+  const replay = await harness.feed('a')
+  assert.equal(replay.events[0].costCny, 9)
+  assert.equal(replay.events[0].costFound, true)
+})
+
+await checkAsync('空会话游标可跨过其他会话，但不会跳过其后新增的本会话事件', async () => {
+  const harness = makeHarness()
+  harness.finish('b', 1)
+  const empty = await harness.feed('a')
+  assert.equal(empty.seq, 1)
+  assert.deepEqual(empty.events, [])
+  harness.finish('a', 1)
+  const next = await harness.feed('a', empty.seq)
+  assert.equal(next.seq, 2)
+  assert.deepEqual(next.events.map((row) => row.seq), [2])
+  assert.equal(next.costMeter, false)
+  assert.equal(next.events[0].costCny, null)
+  assert.equal(next.events[0].costFound, false)
+})
+
+for (const [name, getTurnCost, amount, found] of [
+  ['同步抛错', () => { throw new Error('meter unavailable') }, null, false],
+  ['异步拒绝', () => Promise.reject(new Error('meter unavailable')), null, false],
+  ['未定价的 0', () => ({ found: false, cost: 0 }), null, false],
+  ['已知免费', () => ({ found: true, cost: 0 }), 0, true],
+  ['返回非法金额', () => ({ found: true, cost: NaN }), null, false],
+  ['数字旧返回值', () => 0.0123, 0.0123, true],
+]) {
+  await checkAsync(`费用${name}不破坏 feed 与 found 语义`, async (timers) => {
+    const harness = makeHarness(getTurnCost)
+    harness.finish('a', 1)
+    const body = await harness.feed('a')
+    assert.equal(body.seq, 1)
+    assert.equal(body.costMeter, true)
+    assert.equal(body.events.length, 1)
+    assert.equal(body.events[0].costCny, amount)
+    assert.equal(body.events[0].costFound, found)
+    assert.equal(timers.cleared, 1)
+    assert.deepEqual((await harness.feed('a', body.seq)).events, [])
+  })
+}
 
 console.log(`\n${passed} 项通过`)

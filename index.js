@@ -222,21 +222,30 @@ export function apply(ctx, config = {}) {
       const sessionId = url.searchParams.get('sessionId') ?? ''
       const since = Number(url.searchParams.get('since') ?? 0)
       const now = Date.now()
-      const fresh = events.filter((record) => record.sessionId === sessionId
+      // 游标与记录来自同一次同步快照；等待费用期间新增的轮次留给下一次轮询。
+      // seq 是所有会话共享的，不能在 await 后读取，否则会跳过尚未选入 fresh 的记录。
+      const snapshotSeq = seq
+      const snapshot = events.slice()
+      const fresh = snapshot.filter((record) => record.sessionId === sessionId
         && record.seq > (Number.isSafeInteger(since) ? since : 0)
         && now - record.time < KEEP_MS)
       // 刚结束的轮次可能还在等 cost-meter 算钱：等它们落地再返回（最多 1.5 秒），
       // 这样页面拿到的是最终金额，而不是「先播估算、之后不纠正」。
       const waiting = fresh.map((record) => pendingCost.get(record.seq)).filter(Boolean)
       if (waiting.length > 0) {
-        await Promise.race([
-          Promise.allSettled(waiting),
-          new Promise((resolve) => setTimeout(resolve, 1500)),
-        ])
+        let timer
+        try {
+          await Promise.race([
+            Promise.allSettled(waiting),
+            new Promise((resolve) => { timer = setTimeout(resolve, 1500) }),
+          ])
+        } finally {
+          clearTimeout(timer)
+        }
       }
 
       const models = []
-      for (const record of events) {
+      for (const record of snapshot) {
         if (record.sessionId !== sessionId || !record.provider || !record.model) continue
         const key = `${record.provider}/${record.model}`
         if (!models.some((entry) => entry.key === key)) models.push({ key, provider: record.provider, model: record.model })
@@ -259,7 +268,7 @@ export function apply(ctx, config = {}) {
       }
       return Response.json({
         costMeter: Boolean(ctx.get('costMeter')),
-        seq,
+        seq: snapshotSeq,
         models: models.slice(0, 6),
         events: fresh,
       }, { headers: { 'cache-control': 'no-store' } })
