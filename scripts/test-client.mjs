@@ -151,6 +151,26 @@ await check('同样数量的模型发生切换时更新价格列表', async () =
   const h = harness(); await h.start(); h.state.feed.models = [model('a')]; await h.poll()
   h.state.feed.models = [model('b')]; await h.poll(); assert.equal(h.controller.getSnapshot().models[0].key, 'p/b'); h.dispose()
 })
+await check('初始或同批七模型事件不挤回宿主已排除的旧模型，空闲轮询列表稳定', async () => {
+  const events = Array.from({ length: 7 }, (_, i) => ({ ...record(i + 1), provider: 'p', model: `m${i + 1}` }))
+  const models = ['m7', 'm6', 'm5', 'm4', 'm3', 'm2'].map(model)
+  for (const baseline of [true, false]) {
+    const h = harness()
+    if (!baseline) await h.start(0)
+    h.state.feed = { seq: 7, events, models }
+    if (baseline) h.controller.selectSession('s')
+    else await h.poll()
+    await flush()
+    assert.equal(h.controller.getSnapshot().models.map((x) => x.model).join(','), 'm7,m6,m5,m4,m3,m2')
+    h.state.feed = { seq: 7, events: [], models }; await h.poll()
+    assert.equal(h.controller.getSnapshot().models.map((x) => x.model).join(','), 'm7,m6,m5,m4,m3,m2'); h.dispose()
+  }
+})
+await check('旧版宿主未提供模型列表时仍从轮次中补出模型', async () => {
+  const h = harness(); await h.start(0)
+  h.state.feed = { seq: 1, events: [{ ...record(1), provider: 'p', model: 'legacy' }] }; await h.poll()
+  assert.equal(h.controller.getSnapshot().models[0].model, 'legacy'); h.dispose()
+})
 await check('清空单价恢复目录值，保留其他覆盖；显式 0 仍可设置', async () => {
   const h = harness({ config: { modelPrices: { 'p/a': { input: 5, output: 8 } } } }); await h.start()
   h.state.feed.models = [model('a')]; await h.poll()

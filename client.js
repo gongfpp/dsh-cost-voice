@@ -436,7 +436,8 @@ window.__ModuleLoader__.load({
           if (stopped || generation !== sessionGeneration) return
           setStatus({ costMeter: Boolean(data.costMeter), error: '' })
           const seenModels = Array.isArray(data.models) ? data.models.slice(0, 6) : [...view.models]
-          for (const record of data.events ?? []) {
+          // 新宿主已按同次快照选好最近六项；完整事件批次里的旧模型不能再挤回列表。
+          if (!Array.isArray(data.models)) for (const record of data.events ?? []) {
             if (!record?.provider || !record?.model) continue
             const key = `${record.provider}/${record.model}`
             if (!seenModels.some((entry) => entry.key === key)) seenModels.unshift({ key, provider: record.provider, model: record.model })
