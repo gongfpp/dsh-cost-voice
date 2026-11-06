@@ -245,7 +245,9 @@ export function apply(ctx, config = {}) {
       }
 
       const models = []
-      for (const record of snapshot) {
+      // 最近使用的模型优先，重复模型仅占一项；空闲轮询也保持这六项，不退回最早六种。
+      for (let index = snapshot.length - 1; index >= 0 && models.length < 6; index -= 1) {
+        const record = snapshot[index]
         if (record.sessionId !== sessionId || !record.provider || !record.model) continue
         const key = `${record.provider}/${record.model}`
         if (!models.some((entry) => entry.key === key)) models.push({ key, provider: record.provider, model: record.model })

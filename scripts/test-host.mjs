@@ -202,6 +202,51 @@ await checkAsync('空会话游标可跨过其他会话，但不会跳过其后�
   assert.equal(next.events[0].costFound, false)
 })
 
+await checkAsync('七种模型仅保留最近六种，空闲 poll 不会使最新模型消失', async () => {
+  const harness = makeHarness()
+  for (let turn = 1; turn <= 6; turn += 1) harness.finish('a', turn, `m${turn}`)
+  const initial = await harness.feed('a')
+  assert.deepEqual(initial.models.map((row) => row.model).sort(), ['m1', 'm2', 'm3', 'm4', 'm5', 'm6'])
+  harness.finish('a', 7, 'm7')
+  const seventh = await harness.feed('a', initial.seq)
+  assert.equal(seventh.seq, 7)
+  assert.deepEqual(seventh.events.map((row) => row.turn), [7])
+  const expected = ['m7', 'm6', 'm5', 'm4', 'm3', 'm2']
+  assert.deepEqual(seventh.models.map((row) => row.model), expected)
+  const idle = await harness.feed('a', seventh.seq)
+  assert.deepEqual(idle.events, [])
+  assert.deepEqual(idle.models, seventh.models)
+  // 同一模型再次使用应移动到最前，不重复占位；其他会话的模型不混入。
+  harness.finish('a', 8, 'm3')
+  harness.finish('b', 1, 'other-session')
+  const reused = await harness.feed('a', idle.seq)
+  assert.deepEqual(reused.models.map((row) => row.model), ['m3', 'm7', 'm6', 'm5', 'm4', 'm2'])
+  assert.deepEqual((await harness.feed('a', reused.seq)).models, reused.models)
+})
+
+await checkAsync('六模型边界在费用延期期间仍与本次快照游标一致', async () => {
+  const cost = deferred()
+  const started = deferred()
+  const harness = makeHarness((sessionId, startSeq) => {
+    if (startSeq === 70) { started.resolve(); return cost.promise }
+    return { found: true, cost: 0 }
+  })
+  for (let turn = 1; turn <= 7; turn += 1) harness.finish('a', turn, `m${turn}`)
+  const pending = harness.feed('a')
+  await started.promise
+  harness.finish('a', 8, 'm8')
+  cost.resolve({ found: true, cost: 1 })
+  const snapshot = await pending
+  assert.equal(snapshot.seq, 7)
+  assert.deepEqual(snapshot.models.map((row) => row.model), ['m7', 'm6', 'm5', 'm4', 'm3', 'm2'])
+  assert.deepEqual(snapshot.events.map((row) => row.turn), [1, 2, 3, 4, 5, 6, 7])
+  const next = await harness.feed('a', snapshot.seq)
+  assert.equal(next.seq, 8)
+  assert.deepEqual(next.events.map((row) => row.turn), [8])
+  assert.deepEqual(next.models.map((row) => row.model), ['m8', 'm7', 'm6', 'm5', 'm4', 'm3'])
+  assert.deepEqual((await harness.feed('a', next.seq)).models, next.models)
+})
+
 for (const [name, getTurnCost, amount, found] of [
   ['同步抛错', () => { throw new Error('meter unavailable') }, null, false],
   ['异步拒绝', () => Promise.reject(new Error('meter unavailable')), null, false],

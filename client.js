@@ -144,6 +144,7 @@ window.__ModuleLoader__.load({
         audioBlocked: '浏览器暂未允许播放声音，点一次「试听」后再重试。',
         audioUnsupported: '浏览器不支持音频播放。',
         audioLoadFailed: '音频片段读取失败', audioFailed: '播放失败',
+        audioInterrupted: '播放因页面刷新或插件停用而中断，可手动重试。',
         queued: '排队中', playing: '播放中', failed: '播放失败', skipped: '队列已满，未播放', retry: '重试',
       },
       en: {
@@ -168,6 +169,7 @@ window.__ModuleLoader__.load({
         audioBlocked: 'The browser blocked audio. Press "Preview", then retry.',
         audioUnsupported: 'This browser does not support audio playback.',
         audioLoadFailed: 'Could not load audio clip', audioFailed: 'Playback failed',
+        audioInterrupted: 'Playback was interrupted by a page reload or plugin shutdown. Retry manually.',
         queued: 'Queued', playing: 'Playing', failed: 'Playback failed', skipped: 'Queue full; not played', retry: 'Retry',
       },
     }
@@ -188,6 +190,12 @@ window.__ModuleLoader__.load({
     function createController() {
       const config = readJSON(CONFIG_KEY, DEFAULTS)
       let log = (() => { try { const raw = localStorage.getItem(LOG_KEY); return raw ? JSON.parse(raw) : [] } catch { return [] } })()
+      // 音频队列不跨页面/插件实例恢复；中断记录必须可手动补播，不能永远停在瞬态。
+      if (!Array.isArray(log)) log = []
+      log = log.map((entry) => ['queued', 'playing'].includes(entry?.state)
+        ? { ...entry, state: 'failed', error: t('audioInterrupted') }
+        : entry)
+      writeJSON(LOG_KEY, log)
       let seen = (() => { try { const raw = localStorage.getItem(SEEN_KEY); return raw ? JSON.parse(raw) : {} } catch { return {} } })()
       let view = {
         config,
