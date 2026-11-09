@@ -1,10 +1,10 @@
 {
   "name": "dsh-cost-voice",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "scripts": {
     "test": "node scripts/test-core.mjs && node scripts/test-host.mjs && node scripts/test-client.mjs && node scripts/smoke-host.mjs && node scripts/smoke-client.mjs"
   },
-  "description": "每轮会话结束后用支付宝或大白饭的声音播报本轮花费；金额优先取 dsh-cost-meter，否则按该轮模型单价估算。Per-turn spend voice announcements for DeepSeek Harness with Alipay or Dabaifan voice packs.",
+  "description": "大白饭到账语音播报：每轮会话结束默认用内置大白饭声音播报本轮估算花费，也可切换支付宝音色；音频全部内置，无需语音服务。Dabaifan per-turn spend voice announcements for DeepSeek Harness.",
   "type": "module",
   "license": "MIT",
   "author": "gongfpp",
@@ -59,8 +59,8 @@
   },
   "dshhub": {
     "schemaVersion": 1,
-    "displayName": "dsh-cost-voice",
-    "summary": "每轮结束用支付宝或大白饭语音播报本轮花费；金额优先取 dsh-cost-meter，否则按该轮模型单价估算，语音为内置音频片段，无需联网。",
+    "displayName": "大白饭到账语音播报",
+    "summary": "每轮结束默认用内置大白饭到账语音播报本轮估算花费，可切换支付宝音色；优先取 dsh-cost-meter，否则按模型单价估算，无需联网语音服务。",
     "categories": [
       "usage",
       "voice"

@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Per-turn spend voice",
-    "description": "After each turn, announces the turn's estimated spend in an Alipay or Dabaifan voice."
+    "title": "Dabaifan Arrival Voice Announcements",
+    "description": "Announces each turn's estimated spend with the bundled Dabaifan voice by default; an Alipay-style voice is also available."
   }
 }

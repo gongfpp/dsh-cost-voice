@@ -95,6 +95,20 @@ function harness(options = {}) {
 let passed = 0
 async function check(name, run) { await run(); passed++; console.log(`  ok  ${name}`) }
 
+await check('新安装默认大白饭，范围内金额播放内置整句', async () => {
+  const h = harness(); await h.start(0); await h.turn(1, 0.31); await h.advance(1000)
+  assert.equal(h.controller.getSnapshot().config.voice, 'dabaifan')
+  assert.ok(h.requests.some((url) => url.includes('dabaifan-amounts%2F31.mp3')))
+  assert.ok(!h.requests.some((url) => url.includes('alipay-zh')))
+  assert.equal(h.controller.getSnapshot().log[0].pack, 'dabaifan'); h.dispose()
+})
+await check('升级保留用户已有支付宝音色选择', async () => {
+  const h = harness({ config: { voice: 'alipay' } }); await h.start(0); await h.turn(1, 0.31); await h.advance(1000)
+  assert.equal(h.controller.getSnapshot().config.voice, 'alipay')
+  assert.ok(h.requests.some((url) => url.includes('alipay-zh')))
+  assert.ok(!h.requests.some((url) => url.includes('dabaifan-amounts'))); h.dispose()
+})
+
 await check('首次基线为 0 后，第一轮新完成仍会播报', async () => {
   const h = harness(); await h.start(0); await h.turn(1); await h.advance(1000)
   assert.equal(h.controller.getSnapshot().log.length, 1)

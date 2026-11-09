@@ -12,8 +12,8 @@ const iconHref = `data:image/png;base64,${iconBase64}`;
 // 图标在分享图上的位置与尺寸（1280×640 画布）
 const ICON = { x: 96, y: 176, size: 288, radius: 60 };
 
-const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" font-family="'Microsoft YaHei','PingFang SC','Noto Sans SC',system-ui,sans-serif" role="img" aria-label="每轮扣款语音播报 · dsh-cost-voice">
-  <title>每轮扣款语音播报 · dsh-cost-voice</title>
+const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" font-family="'Microsoft YaHei','PingFang SC','Noto Sans SC',system-ui,sans-serif" role="img" aria-label="大白饭到账语音播报 · dsh-cost-voice">
+  <title>大白饭到账语音播报 · dsh-cost-voice</title>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#0B1220"/>
@@ -37,17 +37,17 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" widt
   <image href="${iconHref}" x="${ICON.x}" y="${ICON.y}" width="${ICON.size}" height="${ICON.size}" clip-path="url(#iconClip)" preserveAspectRatio="xMidYMid slice"/>
 
   <!-- 文字 -->
-  <text x="470" y="250" font-size="64" font-weight="700" fill="#F8FAFC">每轮扣款语音播报</text>
+  <text x="470" y="250" font-size="64" font-weight="700" fill="#F8FAFC">大白饭到账语音播报</text>
   <text x="470" y="310" font-size="30" fill="#94A3B8">dsh-cost-voice · DeepSeek Harness 插件</text>
-  <text x="470" y="392" font-size="34" fill="#E2E8F0">每轮会话结束，支付宝到账。</text>
+  <text x="470" y="392" font-size="34" fill="#E2E8F0">每轮会话结束，大白饭到账。</text>
   <text x="470" y="440" font-size="34" fill="#E2E8F0">本轮花了多少，用声音告诉你。</text>
 
   <!-- 标签 -->
   <g font-size="24" fill="#CBD5F5">
     <rect x="470" y="492" width="188" height="52" rx="26" fill="#1E293B" stroke="#334155"/>
-    <text x="564" y="526" text-anchor="middle">支付宝音色</text>
+    <text x="564" y="526" text-anchor="middle">默认大白饭</text>
     <rect x="678" y="492" width="188" height="52" rx="26" fill="#1E293B" stroke="#334155"/>
-    <text x="772" y="526" text-anchor="middle">大白饭音色</text>
+    <text x="772" y="526" text-anchor="middle">可选支付宝</text>
     <rect x="886" y="492" width="248" height="52" rx="26" fill="#1E293B" stroke="#334155"/>
     <text x="1010" y="526" text-anchor="middle">音频内置 · 不联网</text>
   </g>

@@ -12,7 +12,7 @@ window.__ModuleLoader__.load({
     const LOG_KEY = 'dsh-cost-voice.log.v1'
     const DEFAULTS = {
       enabled: true,
-      voice: 'alipay',
+      voice: 'dabaifan',
       basis: 'auto',
       inputPrice: 1,
       outputPrice: 2,
@@ -149,7 +149,7 @@ window.__ModuleLoader__.load({
       },
       en: {
         on: 'On', off: 'Off', yes: 'Yes', no: 'No',
-        sectionAnnounce: 'Announcement', enabled: 'Enabled', voice: 'Voice', alipay: 'Alipay', dabaifan: 'Big fish',
+        sectionAnnounce: 'Announcement', enabled: 'Enabled', voice: 'Voice', alipay: 'Alipay', dabaifan: 'Dabaifan',
         basis: 'Amount source', basisMeter: 'Cost plugin', basisTokens: 'Estimate',
         preview: 'Preview', clearLog: 'Clear log',
         meterReading: 'Checking the cost plugin…',
@@ -609,7 +609,7 @@ window.__ModuleLoader__.load({
         h('section', { className: 'cv-group' },
           h('h3', null, t('sectionAnnounce')),
           h('div', { className: 'cv-row' }, h('span', null, t('enabled')), toggle('enabled', c.enabled ? t('on') : t('off'))),
-          h('div', { className: 'cv-row' }, h('span', null, t('voice')), segment('voice', [['alipay', t('alipay')], ['dabaifan', t('dabaifan')]])),
+          h('div', { className: 'cv-row' }, h('span', null, t('voice')), segment('voice', [['dabaifan', t('dabaifan')], ['alipay', t('alipay')]])),
           h('div', { className: 'cv-row' }, h('span', null, t('basis')), segment('basis', [['auto', t('basisMeter')], ['tokens', t('basisTokens')]])),
           h('div', { className: 'cv-actions' },
             h('button', { type: 'button', className: 'primary', onClick: () => controller.preview() }, t('preview')),
