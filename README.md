@@ -99,4 +99,4 @@ npm pack --dry-run               # 核对发布内容
 
 ## 许可
 
-[MIT](LICENSE)
+代码、脚本和文档为 [MIT](LICENSE)。随包音频片段与图标不在 MIT 授权范围内：它们只随本插件提供，限个人非商用，不得单独提取、转授权或再分发。来源与限制见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。

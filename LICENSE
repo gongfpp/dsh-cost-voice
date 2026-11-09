@@ -19,3 +19,13 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Scope of this grant
+
+The permission above covers the plugin source code, scripts and documentation in
+this repository. It does not extend to the bundled third-party assets:
+`assets/voices/alipay-zh/`, `assets/voices/dabaifan-clone/`,
+`assets/voices/dabaifan-amounts/` and `icon.png`. Those files are included so the
+packaged plugin works offline, and are limited to personal, non-commercial use
+together with this plugin. Provenance and limits are documented in
+THIRD-PARTY-NOTICES.md.
